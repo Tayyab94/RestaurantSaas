@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- EF Core migrations for SqlServer only. Generated with scripts/add-migration.ps1 -Provider SqlServer. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>RestaurantSaaS.Migrations.SqlServer</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\RestaurantSaaS.Infrastructure\RestaurantSaaS.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

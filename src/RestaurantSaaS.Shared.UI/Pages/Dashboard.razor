@@ -1,0 +1,164 @@
+@page "/"
+@attribute [Authorize(Policy = Permissions.DashboardView)]
+@inject IDashboardService DashboardService
+
+<PageTitle>Dashboard | RestoPOS</PageTitle>
+
+<OnboardingChecklist />
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger d-flex align-items-center gap-2" role="alert">
+        <i class="bi bi-exclamation-triangle"></i>
+        <span>@_error</span>
+        <button type="button" class="btn btn-sm btn-outline-danger ms-auto" @onclick="LoadAsync">Retry</button>
+    </div>
+}
+else if (_summary is null)
+{
+    <div class="placeholder-glow">
+        <div class="row g-3 mb-3">
+            @for (var i = 0; i < 6; i++)
+            {
+                <div class="col-6 col-lg-4 col-xl-2"><div class="card"><div class="card-body"><span class="placeholder col-12 py-4"></span></div></div></div>
+            }
+        </div>
+        <div class="card"><div class="card-body"><span class="placeholder col-12 py-5"></span></div></div>
+    </div>
+}
+else
+{
+    var s = _summary;
+    decimal? delta = s.YesterdaySales == 0 ? null : (s.TodaySales - s.YesterdaySales) / s.YesterdaySales * 100m;
+    var maxQuantity = s.TopItems.Count == 0 ? 1 : s.TopItems.Max(i => i.Quantity);
+
+    <PageHeader Title="Dashboard" Subtitle="@($"Business date {s.BusinessDate:dddd, dd MMM yyyy}")">
+        @if (s.IsDemo)
+        {
+            <span class="badge text-bg-warning" title="These numbers are sample data until the order modules are built">Demo data</span>
+        }
+        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="LoadAsync" disabled="@_loading">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+    </PageHeader>
+
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-lg-4 col-xl-2">
+            <StatCard Title="Today's sales" Value="@Money(s.TodaySales)" Icon="bi-cash-stack" Tone="primary" Delta="@delta" />
+        </div>
+        <div class="col-6 col-lg-4 col-xl-2">
+            <StatCard Title="Open orders" Value="@s.OpenOrders.ToString()" Icon="bi-receipt" Tone="info" Hint="Being prepared or served" />
+        </div>
+        <div class="col-6 col-lg-4 col-xl-2">
+            <StatCard Title="Tables occupied" Value="@($"{s.TablesOccupied} / {s.TablesTotal}")" Icon="bi-grid-3x3-gap" Tone="success" Hint="@($"{(s.TablesTotal == 0 ? 0 : s.TablesOccupied * 100 / s.TablesTotal)}% of the floor")" />
+        </div>
+        <div class="col-6 col-lg-4 col-xl-2">
+            <StatCard Title="Pending deliveries" Value="@s.PendingDeliveries.ToString()" Icon="bi-bicycle" Tone="warning" Hint="Assigned or on the road" />
+        </div>
+        <div class="col-6 col-lg-4 col-xl-2">
+            <StatCard Title="Cash in drawer" Value="@Money(s.CashInDrawer)" Icon="bi-wallet2" Tone="success" Hint="Current shift" />
+        </div>
+        <div class="col-6 col-lg-4 col-xl-2">
+            <StatCard Title="Low stock items" Value="@s.LowStockItems.ToString()" Icon="bi-box-seam" Tone="danger" Hint="Below the reorder level" />
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-xl-8">
+            <div class="card h-100">
+                <div class="card-header"><span>Sales, last 7 days</span><small class="text-body-secondary">@s.Currency</small></div>
+                <div class="card-body">
+                    <SalesChart Points="s.SalesLast7Days" Currency="@s.Currency" />
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4">
+            <div class="card h-100">
+                <div class="card-header"><span>Orders by type</span><small class="text-body-secondary">Last 7 days</small></div>
+                <div class="card-body">
+                    <DonutChart Slices="s.OrderTypeShare" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-xl-5">
+            <div class="card h-100">
+                <div class="card-header"><span>Top selling items</span><small class="text-body-secondary">Today</small></div>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0 data-table">
+                        <thead><tr><th>Item</th><th class="text-end">Qty</th><th class="text-end">Amount</th></tr></thead>
+                        <tbody>
+                            @foreach (var item in s.TopItems)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">@item.Name</div>
+                                        <div class="progress progress-thin" role="progressbar" aria-label="Share of the best seller">
+                                            <div class="progress-bar" style="width:@(item.Quantity * 100 / maxQuantity)%"></div>
+                                        </div>
+                                    </td>
+                                    <td class="text-end">@item.Quantity</td>
+                                    <td class="text-end">@item.Amount.ToString("N0")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-7">
+            <div class="card h-100">
+                <div class="card-header"><span>Recent orders</span><small class="text-body-secondary">Latest first</small></div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 data-table">
+                        <thead><tr><th>Order</th><th>Type</th><th>Reference</th><th class="text-end">Total</th><th>Status</th><th class="text-end">Time</th></tr></thead>
+                        <tbody>
+                            @foreach (var order in s.RecentOrders)
+                            {
+                                <tr>
+                                    <td class="fw-semibold">@order.Number</td>
+                                    <td>@order.Type</td>
+                                    <td class="text-body-secondary">@order.Reference</td>
+                                    <td class="text-end">@order.Total.ToString("N0")</td>
+                                    <td><StatusBadge Status="@order.Status" /></td>
+                                    <td class="text-end text-body-secondary">@order.At.ToLocalTime().ToString("HH:mm")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private DashboardSummaryDto? _summary;
+    private string? _error;
+    private bool _loading;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+
+        try
+        {
+            _summary = await DashboardService.GetSummaryAsync();
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private string Money(decimal value) => $"{_summary!.Currency} {value:N0}";
+}

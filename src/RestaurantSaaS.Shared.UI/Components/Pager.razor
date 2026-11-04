@@ -1,0 +1,108 @@
+@if (TotalCount > 0)
+{
+    <div class="pager">
+        <div class="pager-info">Showing @From to @To of @TotalCount.ToString("N0")</div>
+
+        <div class="d-flex align-items-center gap-3">
+            <label class="pager-size">
+                Rows
+                <select class="form-select form-select-sm" value="@PageSize" @onchange="OnPageSizeChanged">
+                    @foreach (var size in PageSizes)
+                    {
+                        <option value="@size">@size</option>
+                    }
+                </select>
+            </label>
+
+            <nav aria-label="Pagination">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item @(Page <= 1 ? "disabled" : string.Empty)">
+                        <button type="button" class="page-link" disabled="@(Page <= 1)" @onclick="() => GoTo(Page - 1)" aria-label="Previous page">
+                            <i class="bi bi-chevron-left"></i>
+                        </button>
+                    </li>
+
+                    @foreach (var number in Window())
+                    {
+                        @if (number == 0)
+                        {
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        }
+                        else
+                        {
+                            <li class="page-item @(number == Page ? "active" : string.Empty)">
+                                <button type="button" class="page-link" @onclick="() => GoTo(number)">@number</button>
+                            </li>
+                        }
+                    }
+
+                    <li class="page-item @(Page >= TotalPages ? "disabled" : string.Empty)">
+                        <button type="button" class="page-link" disabled="@(Page >= TotalPages)" @onclick="() => GoTo(Page + 1)" aria-label="Next page">
+                            <i class="bi bi-chevron-right"></i>
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public int Page { get; set; } = 1;
+
+    [Parameter, EditorRequired]
+    public int PageSize { get; set; } = PageRequest.DefaultPageSize;
+
+    [Parameter, EditorRequired]
+    public int TotalCount { get; set; }
+
+    [Parameter]
+    public int[] PageSizes { get; set; } = [10, 25, 50, 100];
+
+    [Parameter]
+    public EventCallback<int> PageChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<int> PageSizeChanged { get; set; }
+
+    private int TotalPages => PageSize <= 0 ? 0 : (int)Math.Ceiling(TotalCount / (double)PageSize);
+
+    private int From => TotalCount == 0 ? 0 : ((Page - 1) * PageSize) + 1;
+
+    private int To => Math.Min(Page * PageSize, TotalCount);
+
+    private Task GoTo(int page) =>
+        page < 1 || page > TotalPages || page == Page ? Task.CompletedTask : PageChanged.InvokeAsync(page);
+
+    private Task OnPageSizeChanged(ChangeEventArgs e) =>
+        int.TryParse(e.Value?.ToString(), out var size) ? PageSizeChanged.InvokeAsync(size) : Task.CompletedTask;
+
+    // Page numbers to show; 0 means an ellipsis.
+    private IEnumerable<int> Window()
+    {
+        if (TotalPages <= 7)
+        {
+            return Enumerable.Range(1, TotalPages);
+        }
+
+        var numbers = new SortedSet<int> { 1, TotalPages, Page - 1, Page, Page + 1 };
+        numbers.RemoveWhere(n => n < 1 || n > TotalPages);
+
+        var result = new List<int>();
+        var previous = 0;
+
+        foreach (var number in numbers)
+        {
+            if (number - previous > 1)
+            {
+                result.Add(0);
+            }
+
+            result.Add(number);
+            previous = number;
+        }
+
+        return result;
+    }
+}

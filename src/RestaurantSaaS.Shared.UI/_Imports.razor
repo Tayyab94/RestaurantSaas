@@ -1,0 +1,19 @@
+@using System.Net.Http
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.JSInterop
+@using RestaurantSaaS.Contracts.Dtos
+@using RestaurantSaaS.Contracts.Paging
+@using RestaurantSaaS.Contracts.Services
+@using RestaurantSaaS.Domain.Security
+@using RestaurantSaaS.Shared.UI.Components
+@using RestaurantSaaS.Shared.UI.Layout
+@using RestaurantSaaS.Shared.UI.Services
+@using RestaurantSaaS.Shared.UI.Services.Auth
+@* Every page needs a signed-in user by default. Public pages (sign-in, registration) add [AllowAnonymous]. *@
+@attribute [Authorize]

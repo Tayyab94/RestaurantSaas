@@ -1,0 +1,1 @@
+Files placed in this folder are packaged with the app (MauiAsset).

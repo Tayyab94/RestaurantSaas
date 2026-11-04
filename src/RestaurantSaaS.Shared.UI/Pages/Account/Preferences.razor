@@ -1,0 +1,98 @@
+@page "/account/preferences"
+@inject IPreferenceService Prefs
+@inject ThemeService Theme
+
+<PageTitle>Preferences | RestoPOS</PageTitle>
+
+<PageHeader Title="Preferences" Subtitle="Your own theme and language. They follow you to every device." />
+
+<div class="card" style="max-width: 520px">
+    <form class="card-body" @onsubmit="SaveAsync">
+        @if (_saved)
+        {
+            <div class="alert alert-success" role="alert">Saved.</div>
+        }
+
+        @if (_error is not null)
+        {
+            <div class="alert alert-danger" role="alert">@_error</div>
+        }
+
+        <div class="mb-3">
+            <label class="form-label" for="theme">Theme</label>
+            <select id="theme" class="form-select" @bind="_theme">
+                <option value="Light">Light</option>
+                <option value="Dark">Dark</option>
+            </select>
+        </div>
+
+        <div class="mb-4">
+            <label class="form-label" for="language">Language</label>
+            <select id="language" class="form-select" @bind="_language">
+                <option value="en">English</option>
+                <option value="ur">اردو (Urdu)</option>
+            </select>
+            <div class="form-text">Your choice is saved. Urdu screens arrive in a later release.</div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" disabled="@_busy">@(_busy ? "Saving..." : "Save")</button>
+    </form>
+</div>
+
+@code {
+    private string _theme = "Light";
+    private string _language = "en";
+    private string? _error;
+    private bool _saved;
+    private bool _busy;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        var dark = await Theme.InitializeAsync();
+        _theme = dark ? "Dark" : "Light";
+
+        try
+        {
+            var preferences = await Prefs.GetAsync();
+            _language = preferences.Language;
+
+            if (preferences.Theme is "Light" or "Dark")
+            {
+                _theme = preferences.Theme;
+            }
+        }
+        catch (ServiceException)
+        {
+            // Keep the defaults.
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task SaveAsync()
+    {
+        _error = null;
+        _saved = false;
+        _busy = true;
+
+        try
+        {
+            await Prefs.SaveAsync(new UserPreferencesDto(_theme, _language));
+            await Theme.SetDarkAsync(_theme == "Dark");
+            _saved = true;
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

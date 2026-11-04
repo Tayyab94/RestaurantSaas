@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <!-- Windows desktop app: MAUI Blazor Hybrid. It renders the SAME screens as the web (Shared.UI).
+       Two modes, chosen in the settings:
+         Standalone  the app runs the application code itself with its own local database (SQL Server or PostgreSQL),
+                     installed on the same PC. No server and no hosting. This is the product for clients who only want the desktop app.
+         Connected   the app only shows the screens and calls the Web server API (LAN or cloud).
+       MAUI manages its package versions, so central package management is off here. -->
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-windows10.0.19041.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>RestaurantSaaS.Desktop</RootNamespace>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <EnableDefaultCssItems>false</EnableDefaultCssItems>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+
+    <ApplicationTitle>RestoPOS</ApplicationTitle>
+    <ApplicationId>com.restaurantsaas.desktop</ApplicationId>
+    <ApplicationDisplayVersion>0.3.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
+    <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#1F4E5F" />
+    <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#1F4E5F" BaseSize="128,128" />
+    <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RestaurantSaaS.Shared.UI\RestaurantSaaS.Shared.UI.csproj" />
+    <ProjectReference Include="..\RestaurantSaaS.Application\RestaurantSaaS.Application.csproj" />
+    <ProjectReference Include="..\RestaurantSaaS.Infrastructure\RestaurantSaaS.Infrastructure.csproj" />
+    <!-- Referenced only so the migration assemblies are copied next to the app (Standalone mode applies them at start-up). -->
+    <ProjectReference Include="..\RestaurantSaaS.Migrations.SqlServer\RestaurantSaaS.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\RestaurantSaaS.Migrations.PostgreSql\RestaurantSaaS.Migrations.PostgreSql.csproj" />
+  </ItemGroup>
+</Project>

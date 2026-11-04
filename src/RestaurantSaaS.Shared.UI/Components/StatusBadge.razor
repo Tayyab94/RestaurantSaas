@@ -1,0 +1,16 @@
+<span class="badge status-badge @Css">@Status</span>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Status { get; set; } = string.Empty;
+
+    private string Css => Status.ToLowerInvariant() switch
+    {
+        "completed" or "served" => "text-bg-success",
+        "preparing" => "text-bg-warning",
+        "ready" => "text-bg-info",
+        "out for delivery" => "text-bg-primary",
+        "cancelled" => "text-bg-danger",
+        _ => "text-bg-secondary",
+    };
+}

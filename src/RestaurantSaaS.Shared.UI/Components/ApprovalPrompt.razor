@@ -1,0 +1,102 @@
+@inject IApprovalService Approvals
+
+<div class="card border-warning">
+    <form class="card-body" @onsubmit="ApproveAsync">
+        <div class="fw-semibold mb-1"><i class="bi bi-shield-check"></i> Manager approval needed</div>
+        @if (!string.IsNullOrWhiteSpace(Title))
+        {
+            <div class="small text-body-secondary mb-3">@Title</div>
+        }
+
+        @if (_error is not null)
+        {
+            <div class="alert alert-danger" role="alert">@_error</div>
+        }
+
+        <div class="row g-2 align-items-end">
+            <div class="col-md-5">
+                <label class="form-label" for="ap-user">Manager username</label>
+                <input id="ap-user" class="form-control" autocomplete="off" @bind="_userName" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="ap-pin">PIN</label>
+                <input id="ap-pin" type="password" inputmode="numeric" maxlength="6" class="form-control" autocomplete="off" @bind="_pin" />
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-warning btn-sm" disabled="@_busy">@(_busy ? "Checking..." : "Approve")</button>
+                <button type="button" class="btn btn-link btn-sm" @onclick="CancelAsync">Cancel</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+@code {
+    /// <summary>Void, Discount, Return, CashOut or PriceOverride.</summary>
+    [Parameter, EditorRequired]
+    public string ApprovalType { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public Guid BranchId { get; set; }
+
+    /// <summary>What is being approved, for example "Order" or "Invoice".</summary>
+    [Parameter, EditorRequired]
+    public string ReferenceType { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public Guid ReferenceId { get; set; }
+
+    [Parameter]
+    public decimal? Amount { get; set; }
+
+    [Parameter]
+    public decimal? Percent { get; set; }
+
+    [Parameter]
+    public string? Reason { get; set; }
+
+    /// <summary>A short sentence for the manager, for example "Discount of 30% on order 1042".</summary>
+    [Parameter]
+    public string? Title { get; set; }
+
+    [Parameter]
+    public EventCallback<ApprovalResultDto> OnApproved { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    private string? _userName;
+    private string? _pin;
+    private string? _error;
+    private bool _busy;
+
+    private async Task ApproveAsync()
+    {
+        _error = null;
+        _busy = true;
+
+        try
+        {
+            var result = await Approvals.RequestAsync(new ApprovalRequest(
+                ApprovalType, BranchId, _userName ?? string.Empty, _pin ?? string.Empty,
+                ReferenceType, ReferenceId, Amount, Percent, Reason));
+
+            _pin = null;
+            await OnApproved.InvokeAsync(result);
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+            _pin = null;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private Task CancelAsync()
+    {
+        _pin = null;
+        return OnCancel.InvokeAsync();
+    }
+}

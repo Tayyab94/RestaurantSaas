@@ -1,0 +1,16 @@
+<Project>
+  <!-- Settings shared by every project. TargetFramework is set per project (MAUI multi-targets). -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <TreatWarningsAsErrors Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <Deterministic>true</Deterministic>
+    <Company>RestaurantSaaS</Company>
+    <Product>Restaurant and Business Management SaaS</Product>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+</Project>

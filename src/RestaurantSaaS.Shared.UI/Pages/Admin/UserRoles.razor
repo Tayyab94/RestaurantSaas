@@ -1,0 +1,342 @@
+@page "/admin/roles"
+@attribute [Authorize(Policy = Permissions.RoleView)]
+@inject IRoleService Roles
+@inject AuthSession Session
+
+<PageTitle>Roles | RestoPOS</PageTitle>
+
+<PageHeader Title="Roles" Subtitle="What each kind of user may do, and what a manager PIN can approve">
+    @if (CanManage)
+    {
+        <button type="button" class="btn btn-primary btn-sm" @onclick="StartNew"><i class="bi bi-plus-lg"></i> New role</button>
+    }
+</PageHeader>
+
+@if (_message is not null)
+{
+    <div class="alert alert-success" role="alert">@_message</div>
+}
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+
+@if (_editing)
+{
+    <div class="card mb-3">
+        <form class="card-body" @onsubmit="SaveAsync">
+            <h2 class="h5 mb-3">@(_isNew ? "New role" : $"Role: {_name}")</h2>
+
+            @if (_locked)
+            {
+                <div class="alert alert-info" role="alert">The Owner role always has every permission and cannot be changed.</div>
+            }
+
+            @if (_formError is not null)
+            {
+                <div class="alert alert-danger" role="alert">
+                    @_formError
+                    @if (_fieldErrors.Count > 0)
+                    {
+                        <ul class="mb-0 mt-2">
+                            @foreach (var message in _fieldErrors)
+                            {
+                                <li>@message</li>
+                            }
+                        </ul>
+                    }
+                </div>
+            }
+
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <label class="form-label" for="r-name">Name</label>
+                    <input id="r-name" class="form-control" @bind="_name" disabled="@(_locked || _isSystem)" />
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label" for="r-desc">Description</label>
+                    <input id="r-desc" class="form-control" @bind="_description" disabled="@(_locked || _isSystem)" />
+                </div>
+            </div>
+
+            <div class="fw-semibold mb-2">Permissions</div>
+            <div class="form-text mb-2">You can only give permissions that you have yourself.</div>
+            <div class="row g-3 mb-4">
+                @foreach (var group in _catalog.GroupBy(p => p.Module))
+                {
+                    <div class="col-md-4">
+                        <div class="role-group">
+                            <div class="role-group-title">@group.Key</div>
+                            @foreach (var permission in group)
+                            {
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="@($"p-{permission.Key}")"
+                                           checked="@_selected.Contains(permission.Key)"
+                                           disabled="@(_locked || !Session.Has(permission.Key))"
+                                           @onchange="e => Toggle(permission.Key, e.Value is true)" />
+                                    <label class="form-check-label" for="@($"p-{permission.Key}")">@permission.Description</label>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="fw-semibold mb-2">Approval limits</div>
+            <div class="form-text mb-2">What a user with this role may approve for others by typing their PIN (a bigger discount, a void, a return).</div>
+            <div class="row g-3 mb-4">
+                <div class="col-md-3">
+                    <label class="form-label" for="r-pct">Discount up to (%)</label>
+                    <input id="r-pct" type="number" min="0" max="100" step="0.5" class="form-control" @bind="_percent" disabled="@_locked" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="r-amt">Discount up to (amount)</label>
+                    <input id="r-amt" type="number" min="0" step="1" class="form-control" @bind="_amount" disabled="@_locked" />
+                </div>
+                <div class="col-md-3 pt-md-4">
+                    <div class="form-check mt-md-2">
+                        <input class="form-check-input" type="checkbox" id="r-void" @bind="_canVoid" disabled="@_locked" />
+                        <label class="form-check-label" for="r-void">Can approve voids</label>
+                    </div>
+                </div>
+                <div class="col-md-3 pt-md-4">
+                    <div class="form-check mt-md-2">
+                        <input class="form-check-input" type="checkbox" id="r-ret" @bind="_canReturn" disabled="@_locked" />
+                        <label class="form-check-label" for="r-ret">Can approve returns</label>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                @if (!_locked && CanManage)
+                {
+                    <button type="submit" class="btn btn-primary btn-sm" disabled="@_saving">@(_saving ? "Saving..." : "Save role")</button>
+                }
+                <button type="button" class="btn btn-link btn-sm" @onclick="Cancel">Close</button>
+            </div>
+        </form>
+    </div>
+}
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 data-table">
+            <thead>
+                <tr>
+                    <th>Role</th>
+                    <th>Description</th>
+                    <th class="text-end">Users</th>
+                    <th class="text-end">Permissions</th>
+                    <th>Approves up to</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_roles is null)
+                {
+                    <tr><td colspan="6" class="text-center py-5 text-body-secondary">Loading...</td></tr>
+                }
+                else
+                {
+                    @foreach (var role in _roles)
+                    {
+                        <tr>
+                            <td>
+                                <span class="fw-semibold">@role.Name</span>
+                                <span class="badge @(role.IsSystem ? "text-bg-secondary" : "text-bg-info") ms-1">@(role.IsSystem ? "System" : "Custom")</span>
+                            </td>
+                            <td class="text-body-secondary">@role.Description</td>
+                            <td class="text-end">@role.UserCount</td>
+                            <td class="text-end">@role.Permissions.Count</td>
+                            <td>@DescribeLimit(role)</td>
+                            <td class="text-end text-nowrap">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => Edit(role)">@(CanManage && !IsOwner(role) ? "Edit" : "View")</button>
+                                @if (CanManage && !role.IsSystem && role.UserCount == 0)
+                                {
+                                    <button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => DeleteAsync(role)">Delete</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private IReadOnlyList<RoleDetailDto>? _roles;
+    private IReadOnlyList<PermissionDto> _catalog = [];
+    private readonly HashSet<string> _selected = [];
+
+    private string? _error;
+    private string? _message;
+    private string? _formError;
+    private List<string> _fieldErrors = [];
+    private bool _editing;
+    private bool _isNew;
+    private bool _isSystem;
+    private bool _locked;
+    private bool _saving;
+    private Guid? _editId;
+    private string _name = string.Empty;
+    private string? _description;
+    private decimal _percent;
+    private decimal _amount;
+    private bool _canVoid;
+    private bool _canReturn;
+
+    private bool CanManage => Session.Has(Permissions.RoleManage);
+
+    private static bool IsOwner(RoleDetailDto role) => role.IsSystem && role.Name == SystemRoles.Owner;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _catalog = await Roles.GetPermissionsAsync();
+            await LoadAsync();
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task LoadAsync() => _roles = await Roles.GetDetailsAsync();
+
+    private void StartNew()
+    {
+        ResetEditor();
+        _editing = true;
+        _isNew = true;
+    }
+
+    private void Edit(RoleDetailDto role)
+    {
+        ResetEditor();
+        _editing = true;
+        _isNew = false;
+        _editId = role.Id;
+        _isSystem = role.IsSystem;
+        _locked = IsOwner(role);
+        _name = role.Name;
+        _description = role.Description;
+        _percent = role.Limits.MaxDiscountPercent;
+        _amount = role.Limits.MaxDiscountAmount;
+        _canVoid = role.Limits.CanApproveVoid;
+        _canReturn = role.Limits.CanApproveReturn;
+
+        foreach (var key in role.Permissions)
+        {
+            _selected.Add(key);
+        }
+    }
+
+    private void ResetEditor()
+    {
+        _message = null;
+        _error = null;
+        _formError = null;
+        _fieldErrors = [];
+        _editId = null;
+        _isSystem = false;
+        _locked = false;
+        _name = string.Empty;
+        _description = null;
+        _percent = 0;
+        _amount = 0;
+        _canVoid = false;
+        _canReturn = false;
+        _selected.Clear();
+    }
+
+    private void Cancel() => _editing = false;
+
+    private void Toggle(string key, bool on)
+    {
+        if (on)
+        {
+            _selected.Add(key);
+        }
+        else
+        {
+            _selected.Remove(key);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _formError = null;
+        _fieldErrors = [];
+        _saving = true;
+
+        try
+        {
+            await Roles.SaveAsync(new SaveRoleRequest(
+                _editId,
+                _name,
+                _description,
+                _selected.ToList(),
+                new ApprovalLimitDto(_percent, _amount, _canVoid, _canReturn)));
+
+            _message = _isNew ? "The role was created." : "The role was saved. People with this role get the change within a few minutes, or when they sign in again.";
+            _editing = false;
+            await LoadAsync();
+        }
+        catch (ServiceException ex)
+        {
+            _formError = ex.Message;
+            _fieldErrors = ex.Errors.SelectMany(e => e.Value).ToList();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteAsync(RoleDetailDto role)
+    {
+        _message = null;
+        _error = null;
+
+        try
+        {
+            await Roles.DeleteAsync(role.Id);
+            _message = $"The role {role.Name} was deleted.";
+            await LoadAsync();
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private static string DescribeLimit(RoleDetailDto role)
+    {
+        if (IsOwner(role))
+        {
+            return "No limit";
+        }
+
+        var parts = new List<string>();
+
+        if (role.Limits.MaxDiscountPercent > 0 || role.Limits.MaxDiscountAmount > 0)
+        {
+            parts.Add($"discount {role.Limits.MaxDiscountPercent:0.##}% or {role.Limits.MaxDiscountAmount:0}");
+        }
+
+        if (role.Limits.CanApproveVoid)
+        {
+            parts.Add("voids");
+        }
+
+        if (role.Limits.CanApproveReturn)
+        {
+            parts.Add("returns");
+        }
+
+        return parts.Count == 0 ? "Nothing" : string.Join(", ", parts);
+    }
+}

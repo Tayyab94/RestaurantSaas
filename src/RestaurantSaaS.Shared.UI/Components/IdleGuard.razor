@@ -1,0 +1,74 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject AuthSession Session
+@inject AuthSessionOptions Options
+@inject NavigationManager Navigation
+
+@code {
+    private static readonly TimeSpan ProfileRefreshEvery = TimeSpan.FromMinutes(5);
+
+    private DotNetObjectReference<IdleGuard>? _reference;
+    private Timer? _timer;
+    private DateTime _lastActivity = DateTime.UtcNow;
+    private DateTime _lastProfileRefresh = DateTime.UtcNow;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        if (Options.IdleTimeoutMinutes > 0)
+        {
+            _reference = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("rsIdle.start", _reference);
+        }
+
+        // Every 30 seconds: has the user been away too long? Every 5 minutes: reload the user's permissions.
+        _timer = new Timer(_ => _ = InvokeAsync(CheckAsync), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    [JSInvokable]
+    public void Activity() => _lastActivity = DateTime.UtcNow;
+
+    private async Task CheckAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            return;
+        }
+
+        if (Options.IdleTimeoutMinutes > 0 && DateTime.UtcNow - _lastActivity >= TimeSpan.FromMinutes(Options.IdleTimeoutMinutes))
+        {
+            await Session.SignOutAsync();
+            Navigation.NavigateTo("login?expired=1", replace: true);
+            return;
+        }
+
+        if (DateTime.UtcNow - _lastProfileRefresh >= ProfileRefreshEvery)
+        {
+            _lastProfileRefresh = DateTime.UtcNow;
+            await Session.RefreshProfileAsync();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _timer?.Dispose();
+
+        if (_reference is not null)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("rsIdle.stop");
+            }
+            catch (Exception ex) when (ex is JSDisconnectedException or InvalidOperationException)
+            {
+                // The page is already gone.
+            }
+
+            _reference.Dispose();
+        }
+    }
+}

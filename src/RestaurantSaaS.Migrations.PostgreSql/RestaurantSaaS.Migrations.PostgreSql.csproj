@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- EF Core migrations for PostgreSql only. Generated with scripts/add-migration.ps1 -Provider PostgreSql. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>RestaurantSaaS.Migrations.PostgreSql</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\RestaurantSaaS.Infrastructure\RestaurantSaaS.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

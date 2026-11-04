@@ -1,0 +1,520 @@
+@page "/admin/users"
+@attribute [Authorize(Policy = Permissions.UserView)]
+@inject IUserService UserService
+@inject AuthSession Session
+
+<PageTitle>Users | RestoPOS</PageTitle>
+
+<PageHeader Title="Users" Subtitle="The people who can sign in to this business">
+    @if (CanManage)
+    {
+        <button type="button" class="btn btn-primary btn-sm" @onclick="() => _showForm = !_showForm">
+            <i class="bi bi-person-plus"></i> Add user
+        </button>
+    }
+</PageHeader>
+
+@if (_message is not null)
+{
+    <div class="alert alert-success" role="alert">@_message</div>
+}
+
+@if (_showForm)
+{
+    <div class="card mb-3">
+        <form class="card-body" @onsubmit="CreateAsync">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label" for="u-name">Username</label>
+                    <input id="u-name" class="form-control" @bind="_userName" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="u-full">Full name</label>
+                    <input id="u-full" class="form-control" @bind="_fullName" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="u-role">Role</label>
+                    <select id="u-role" class="form-select" @bind="_roleId">
+                        <option value="@Guid.Empty">Choose a role...</option>
+                        @foreach (var role in _roles)
+                        {
+                            <option value="@role.Id">@role.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="u-pass">Password</label>
+                    <input id="u-pass" type="password" class="form-control" autocomplete="new-password" @bind="_password" />
+                </div>
+                <div class="col-12">
+                    <div class="form-label mb-1">Branches this user may work in</div>
+                    @foreach (var branch in _branches)
+                    {
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="@($"cb-{branch.Id}")"
+                                   checked="@_createBranchIds.Contains(branch.Id)"
+                                   @onchange="e => ToggleIn(_createBranchIds, branch.Id, e.Value is true)" />
+                            <label class="form-check-label" for="@($"cb-{branch.Id}")">@branch.Name</label>
+                        </div>
+                    }
+                    <div class="form-text">The Owner can always work in every branch.</div>
+                </div>
+            </div>
+
+            @if (_formError is not null)
+            {
+                <div class="alert alert-danger mt-3 mb-0" role="alert">
+                    @_formError
+                    @if (_fieldErrors.Count > 0)
+                    {
+                        <ul class="mb-0 mt-2">
+                            @foreach (var message in _fieldErrors)
+                            {
+                                <li>@message</li>
+                            }
+                        </ul>
+                    }
+                </div>
+            }
+
+            <div class="mt-3">
+                <button type="submit" class="btn btn-primary btn-sm" disabled="@_saving">Save user</button>
+                <button type="button" class="btn btn-link btn-sm" @onclick="() => _showForm = false">Cancel</button>
+            </div>
+        </form>
+    </div>
+}
+
+@if (_actionUser is not null)
+{
+    <div class="card mb-3 border-primary">
+        <form class="card-body" @onsubmit="RunActionAsync">
+            <div class="fw-semibold mb-2">@ActionTitle for @_actionUser.FullName</div>
+
+            @if (_actionKind is "pin" or "password")
+            {
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label" for="a-value">@(_actionKind == "pin" ? "PIN (4 to 6 digits)" : "Temporary password")</label>
+                        <input id="a-value" type="password" class="form-control" autocomplete="new-password"
+                               inputmode="@(_actionKind == "pin" ? "numeric" : "text")" maxlength="@(_actionKind == "pin" ? 6 : 100)" @bind="_actionValue" />
+                    </div>
+                </div>
+                @if (_actionKind == "password")
+                {
+                    <div class="form-text">The user must choose a new password at the next sign-in. All their sessions end now.</div>
+                }
+            }
+            else if (_actionKind == "role")
+            {
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label" for="a-role">Role</label>
+                        <select id="a-role" class="form-select" @bind="_actionRoleId">
+                            @foreach (var role in _roles)
+                            {
+                                <option value="@role.Id">@role.Name</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="form-text">The new role applies within a few minutes, or when the user signs in again.</div>
+            }
+            else if (_actionKind == "branches")
+            {
+                @if (IsOwner(_actionUser))
+                {
+                    <div class="text-body-secondary">The Owner can always work in every branch.</div>
+                }
+                else
+                {
+                    @foreach (var branch in _branches)
+                    {
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="@($"ab-{branch.Id}")"
+                                   checked="@_actionBranchIds.Contains(branch.Id)"
+                                   @onchange="e => ToggleIn(_actionBranchIds, branch.Id, e.Value is true)" />
+                            <label class="form-check-label" for="@($"ab-{branch.Id}")">@branch.Name</label>
+                        </div>
+                    }
+                }
+            }
+
+            @if (_actionError is not null)
+            {
+                <div class="alert alert-danger mt-3 mb-0" role="alert">
+                    @_actionError
+                    @if (_actionFieldErrors.Count > 0)
+                    {
+                        <ul class="mb-0 mt-2">
+                            @foreach (var message in _actionFieldErrors)
+                            {
+                                <li>@message</li>
+                            }
+                        </ul>
+                    }
+                </div>
+            }
+
+            <div class="mt-3">
+                @if (!(_actionKind == "branches" && IsOwner(_actionUser)))
+                {
+                    <button type="submit" class="btn btn-primary btn-sm" disabled="@_saving">Save</button>
+                }
+                <button type="button" class="btn btn-link btn-sm" @onclick="CancelAction">Close</button>
+            </div>
+        </form>
+    </div>
+}
+
+<div class="card">
+    <div class="card-header gap-2">
+        <form class="table-search" @onsubmit="SearchAsync" @onsubmit:preventDefault>
+            <i class="bi bi-search"></i>
+            <input type="search" class="form-control form-control-sm" placeholder="Search by name or username" @bind="_search" aria-label="Search users" />
+        </form>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger m-3" role="alert">@_error</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 data-table">
+                <thead>
+                    <tr>
+                        <th><button type="button" class="sort-btn" @onclick='() => SortByAsync("fullName")'>Name @SortIcon("fullName")</button></th>
+                        <th><button type="button" class="sort-btn" @onclick='() => SortByAsync("userName")'>Username @SortIcon("userName")</button></th>
+                        <th>Role</th>
+                        <th>Branches</th>
+                        <th>Status</th>
+                        <th class="text-end">Last sign-in</th>
+                        @if (CanManage)
+                        {
+                            <th class="text-end">Actions</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_result is null || _loading)
+                    {
+                        <tr><td colspan="7" class="text-center py-5 text-body-secondary">Loading...</td></tr>
+                    }
+                    else if (_result.Items.Count == 0)
+                    {
+                        <tr><td colspan="7"><EmptyState Icon="bi-people" Title="No users found" /></td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var user in _result.Items)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@user.FullName</td>
+                                <td>@user.UserName</td>
+                                <td>
+                                    @foreach (var role in user.Roles)
+                                    {
+                                        <span class="badge text-bg-secondary me-1">@role</span>
+                                    }
+                                    @if (user.HasPin)
+                                    {
+                                        <span class="badge text-bg-info" title="Can sign in with a PIN">PIN</span>
+                                    }
+                                </td>
+                                <td class="text-body-secondary">@(user.BranchNames.Count == 0 ? "None" : string.Join(", ", user.BranchNames))</td>
+                                <td><span class="badge @(user.IsActive ? "text-bg-success" : "text-bg-danger")">@(user.IsActive ? "Active" : "Disabled")</span></td>
+                                <td class="text-end text-body-secondary">@(user.LastLoginAt?.ToLocalTime().ToString("dd MMM yyyy HH:mm") ?? "Never")</td>
+                                @if (CanManage)
+                                {
+                                    <td class="text-end">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick='() => StartAction(user, "pin")'>PIN</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick='() => StartAction(user, "branches")'>Branches</button>
+                                        @if (user.Id != Session.User?.Id)
+                                        {
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick='() => StartAction(user, "role")'>Role</button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick='() => StartAction(user, "password")'>Reset password</button>
+                                            <button type="button" class="btn btn-outline-@(user.IsActive ? "danger" : "success") btn-sm" @onclick="() => ToggleActiveAsync(user)">
+                                                @(user.IsActive ? "Disable" : "Enable")
+                                            </button>
+                                        }
+                                        @if (user.HasPin && _actionUser is null)
+                                        {
+                                            <button type="button" class="btn btn-link btn-sm text-danger" @onclick="() => RemovePinAsync(user)">Remove PIN</button>
+                                        }
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card-footer">
+            <Pager Page="_page" PageSize="_pageSize" TotalCount="_result?.TotalCount ?? 0"
+                   PageChanged="PageChangedAsync" PageSizeChanged="PageSizeChangedAsync" />
+        </div>
+    }
+</div>
+
+@code {
+    private PagedResult<UserListItemDto>? _result;
+    private IReadOnlyList<RoleDto> _roles = [];
+    private IReadOnlyList<BranchDto> _branches = [];
+    private string? _error;
+    private string? _message;
+    private bool _loading;
+    private int _page = 1;
+    private int _pageSize = PageRequest.DefaultPageSize;
+    private string? _search;
+    private string _sort = "fullName";
+    private bool _desc;
+
+    private bool _showForm;
+    private bool _saving;
+    private string? _formError;
+    private List<string> _fieldErrors = [];
+    private string? _userName;
+    private string? _fullName;
+    private string? _password;
+    private Guid _roleId;
+    private readonly HashSet<Guid> _createBranchIds = [];
+
+    private UserListItemDto? _actionUser;
+    private string _actionKind = "pin";
+    private string? _actionValue;
+    private Guid _actionRoleId;
+    private readonly HashSet<Guid> _actionBranchIds = [];
+    private string? _actionError;
+    private List<string> _actionFieldErrors = [];
+
+    private bool CanManage => Session.Has(Permissions.UserManage);
+
+    private string ActionTitle => _actionKind switch
+    {
+        "pin" => "Set a PIN",
+        "password" => "Give a temporary password",
+        "role" => "Change the role",
+        _ => "Choose the branches",
+    };
+
+    private static bool IsOwner(UserListItemDto user) => user.Roles.Contains(SystemRoles.Owner);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+
+        try
+        {
+            _roles = await UserService.GetRolesAsync();
+            _branches = await UserService.GetBranchesAsync();
+
+            // A business with one branch: it is chosen for you.
+            if (_branches.Count == 1)
+            {
+                _createBranchIds.Add(_branches[0].Id);
+            }
+        }
+        catch (ServiceException)
+        {
+            _roles = [];
+            _branches = [];
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+
+        try
+        {
+            _result = await UserService.GetPageAsync(new PageRequest(_page, _pageSize, _sort, _desc, _search));
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static void ToggleIn(HashSet<Guid> set, Guid id, bool on)
+    {
+        if (on)
+        {
+            set.Add(id);
+        }
+        else
+        {
+            set.Remove(id);
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        _formError = null;
+        _fieldErrors = [];
+        _saving = true;
+
+        try
+        {
+            await UserService.CreateAsync(new CreateUserRequest(
+                _userName ?? string.Empty, _fullName ?? string.Empty, null, null, _password ?? string.Empty, _roleId, _createBranchIds.ToList()));
+
+            _showForm = false;
+            _userName = _fullName = _password = null;
+            _roleId = Guid.Empty;
+            _message = "The user was added.";
+            await LoadAsync();
+        }
+        catch (ServiceException ex)
+        {
+            _formError = ex.Message;
+            _fieldErrors = ex.Errors.SelectMany(e => e.Value).ToList();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void StartAction(UserListItemDto user, string kind)
+    {
+        _actionUser = user;
+        _actionKind = kind;
+        _actionValue = null;
+        _actionRoleId = user.RoleId ?? Guid.Empty;
+        _actionBranchIds.Clear();
+
+        foreach (var id in user.BranchIds)
+        {
+            _actionBranchIds.Add(id);
+        }
+
+        _actionError = null;
+        _actionFieldErrors = [];
+        _message = null;
+    }
+
+    private void CancelAction() => _actionUser = null;
+
+    private async Task RunActionAsync()
+    {
+        if (_actionUser is null)
+        {
+            return;
+        }
+
+        _actionError = null;
+        _actionFieldErrors = [];
+        _saving = true;
+
+        try
+        {
+            var name = _actionUser.FullName;
+
+            switch (_actionKind)
+            {
+                case "pin":
+                    await UserService.SetPinAsync(_actionUser.Id, _actionValue);
+                    _message = $"The PIN of {name} was saved.";
+                    break;
+                case "password":
+                    await UserService.ResetPasswordAsync(_actionUser.Id, _actionValue ?? string.Empty);
+                    _message = $"{name} has a temporary password and must change it at the next sign-in.";
+                    break;
+                case "role":
+                    await UserService.SetRoleAsync(_actionUser.Id, _actionRoleId);
+                    _message = $"The role of {name} was changed.";
+                    break;
+                default:
+                    await UserService.SetBranchesAsync(_actionUser.Id, _actionBranchIds.ToList());
+                    _message = $"The branches of {name} were saved.";
+                    break;
+            }
+
+            _actionUser = null;
+            await LoadAsync();
+        }
+        catch (ServiceException ex)
+        {
+            _actionError = ex.Message;
+            _actionFieldErrors = ex.Errors.SelectMany(e => e.Value).ToList();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task RemovePinAsync(UserListItemDto user)
+    {
+        await RunSimpleAsync(async () =>
+        {
+            await UserService.SetPinAsync(user.Id, null);
+            _message = $"The PIN of {user.FullName} was removed.";
+        });
+    }
+
+    private async Task ToggleActiveAsync(UserListItemDto user)
+    {
+        await RunSimpleAsync(async () =>
+        {
+            await UserService.SetActiveAsync(user.Id, !user.IsActive);
+            _message = user.IsActive ? $"{user.FullName} was disabled." : $"{user.FullName} was enabled.";
+        });
+    }
+
+    private async Task RunSimpleAsync(Func<Task> action)
+    {
+        _message = null;
+        _error = null;
+
+        try
+        {
+            await action();
+            await LoadAsync();
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private Task SearchAsync()
+    {
+        _page = 1;
+        return LoadAsync();
+    }
+
+    private Task SortByAsync(string column)
+    {
+        _desc = _sort == column && !_desc;
+        _sort = column;
+        _page = 1;
+        return LoadAsync();
+    }
+
+    private Task PageChangedAsync(int page)
+    {
+        _page = page;
+        return LoadAsync();
+    }
+
+    private Task PageSizeChangedAsync(int size)
+    {
+        _pageSize = size;
+        _page = 1;
+        return LoadAsync();
+    }
+
+    private MarkupString SortIcon(string column) =>
+        _sort != column
+            ? new MarkupString("<i class=\"bi bi-arrow-down-up sort-idle\"></i>")
+            : new MarkupString(_desc ? "<i class=\"bi bi-sort-down\"></i>" : "<i class=\"bi bi-sort-up\"></i>");
+}

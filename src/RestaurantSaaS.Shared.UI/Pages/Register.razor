@@ -1,0 +1,227 @@
+@page "/register"
+@page "/setup"
+@layout AuthLayout
+@attribute [AllowAnonymous]
+@inject IAuthService Auth
+@inject ISetupService Setup
+@inject AuthSession Session
+@inject NavigationManager Navigation
+
+<PageTitle>@Title | RestoPOS</PageTitle>
+
+<div class="card auth-card auth-card-wide">
+    <div class="card-body p-4 p-md-5">
+        @if (_result is not null)
+        {
+            <div class="text-center">
+                <div class="success-mark"><i class="bi bi-check-lg"></i></div>
+                <h1 class="auth-title">Your business is ready</h1>
+                <p class="auth-subtitle">Your free trial runs until @_result.TrialEndsAtUtc.ToLocalTime().ToString("dd MMM yyyy").</p>
+
+                <div class="code-box">
+                    <div class="small text-body-secondary">Your business code</div>
+                    <div class="code-value">@_result.BusinessCode</div>
+                </div>
+
+                <p class="text-body-secondary mt-3">Keep this code. You need it, with your username, every time you sign in.</p>
+
+                @if (_error is not null)
+                {
+                    <div class="alert alert-danger" role="alert">@_error</div>
+                }
+
+                <button type="button" class="btn btn-primary w-100 py-2" disabled="@_busy" @onclick="OpenDashboardAsync">
+                    @(_busy ? "Opening..." : "Open my dashboard")
+                </button>
+            </div>
+        }
+        else
+        {
+            <h1 class="auth-title">@Title</h1>
+            <p class="auth-subtitle">@(IsSetup ? "Enter your business details once. This installation then belongs to your business." : "Start your free trial. No card needed.")</p>
+
+            @if (_error is not null)
+            {
+                <div class="alert alert-danger" role="alert">
+                    @_error
+                    @if (_fieldErrors.Count > 0)
+                    {
+                        <ul class="mb-0 mt-2">
+                            @foreach (var message in _fieldErrors)
+                            {
+                                <li>@message</li>
+                            }
+                        </ul>
+                    }
+                </div>
+            }
+
+            <form @onsubmit="RegisterAsync">
+                <div class="row g-3">
+                    <div class="col-md-8">
+                        <label class="form-label" for="bname">Business name</label>
+                        <input id="bname" class="form-control" @bind="_businessName" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="btype">Type</label>
+                        <select id="btype" class="form-select" @bind="_businessType">
+                            @foreach (var type in BusinessTypes)
+                            {
+                                <option value="@type">@type</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="owner">Your full name</label>
+                        <input id="owner" class="form-control" autocomplete="name" @bind="_ownerName" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="phone">Phone number</label>
+                        <input id="phone" class="form-control" autocomplete="tel" placeholder="0300 1234567" @bind="_phone" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="email">Email (optional)</label>
+                        <input id="email" type="email" class="form-control" autocomplete="email" @bind="_email" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="user">Username</label>
+                        <input id="user" class="form-control" autocomplete="username" @bind="_userName" />
+                        <div class="form-text">You will sign in with this.</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="pass">Password</label>
+                        <input id="pass" type="password" class="form-control" autocomplete="new-password" @bind="_password" />
+                        <div class="form-text">At least 8 characters with upper-case, lower-case and a digit.</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="pass2">Confirm password</label>
+                        <input id="pass2" type="password" class="form-control" autocomplete="new-password" @bind="_confirm" />
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100 py-2 mt-4" disabled="@_busy">
+                    @(_busy ? "Please wait..." : IsSetup ? "Set up my business" : "Create business")
+                </button>
+
+                @if (!IsSetup)
+                {
+                    <p class="text-center text-body-secondary mt-4 mb-0">
+                        Already have an account? <a href="login">Sign in</a>
+                    </p>
+                }
+            </form>
+        }
+    </div>
+</div>
+
+@code {
+    private static readonly string[] BusinessTypes = ["Restaurant", "Cafe", "Bakery", "FastFood", "Retail"];
+
+    private SetupStatusDto? _status;
+    private string? _businessName;
+    private string _businessType = "Restaurant";
+    private string? _ownerName;
+    private string? _userName;
+    private string? _phone;
+    private string? _email;
+    private string? _password;
+    private string? _confirm;
+    private string? _error;
+    private List<string> _fieldErrors = [];
+    private bool _busy;
+    private RegisterBusinessResultDto? _result;
+
+    // Desktop and on-premise installations are set up once ("first-run setup"); the cloud lets anyone sign up.
+    private bool IsSetup => _status is { DeploymentMode: not "Cloud" };
+
+    private string Title => IsSetup ? "Set up your business" : "Create your business";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitializeAsync();
+
+        if (Session.IsAuthenticated)
+        {
+            Navigation.NavigateTo(string.Empty, replace: true);
+            return;
+        }
+
+        try
+        {
+            _status = await Setup.GetStatusAsync();
+
+            if (!_status.AllowsRegistration)
+            {
+                // Already set up: nobody can add a second business here.
+                Navigation.NavigateTo("login", replace: true);
+            }
+        }
+        catch (ServiceException)
+        {
+            // The status is only a convenience; the server checks again when the form is sent.
+        }
+    }
+
+    private async Task RegisterAsync()
+    {
+        _error = null;
+        _fieldErrors = [];
+
+        if (_password != _confirm)
+        {
+            _error = "The two passwords are not the same.";
+            return;
+        }
+
+        _busy = true;
+
+        try
+        {
+            _result = await Auth.RegisterBusinessAsync(new RegisterBusinessRequest(
+                _businessName ?? string.Empty,
+                _businessType,
+                _ownerName ?? string.Empty,
+                _userName ?? string.Empty,
+                _email,
+                _phone,
+                _password ?? string.Empty));
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+            _fieldErrors = ex.Errors.SelectMany(e => e.Value).ToList();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    // After registration the owner is signed in at once and lands on the dashboard, where the onboarding checklist waits.
+    private async Task OpenDashboardAsync()
+    {
+        if (_result is null)
+        {
+            return;
+        }
+
+        _error = null;
+        _busy = true;
+
+        try
+        {
+            await Session.SignInAsync(new LoginRequest(_result.BusinessCode, _userName ?? string.Empty, _password ?? string.Empty));
+            _password = null;
+            _confirm = null;
+            Navigation.NavigateTo(string.Empty, replace: true);
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

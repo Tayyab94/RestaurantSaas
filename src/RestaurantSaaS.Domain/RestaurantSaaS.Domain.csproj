@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Entities, enums and business rules. Depends on nothing. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>RestaurantSaaS.Domain</RootNamespace>
+  </PropertyGroup>
+</Project>

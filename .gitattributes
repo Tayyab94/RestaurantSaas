@@ -1,0 +1,7 @@
+* text=auto
+*.cs text eol=lf diff=csharp
+*.razor text eol=lf
+*.md text eol=lf
+*.png binary
+*.jpg binary
+*.ico binary

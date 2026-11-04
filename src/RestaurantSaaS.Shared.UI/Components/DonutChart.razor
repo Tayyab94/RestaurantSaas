@@ -1,0 +1,61 @@
+@using System.Globalization
+
+@if (_total == 0)
+{
+    <EmptyState Icon="bi-pie-chart" Title="No orders yet" />
+}
+else
+{
+    <div class="donut">
+        <svg viewBox="0 0 42 42" class="donut-svg" role="img" aria-label="Orders by type">
+            <circle cx="21" cy="21" r="15.9155" fill="transparent" stroke="var(--rs-border)" stroke-width="5" />
+            @foreach (var s in _segments)
+            {
+                <circle cx="21" cy="21" r="15.9155" fill="transparent" stroke="@s.Color" stroke-width="5"
+                        stroke-dasharray="@F(s.Percent) @F(100 - s.Percent)" stroke-dashoffset="@F(s.Offset)">
+                    <title>@s.Name: @s.Count</title>
+                </circle>
+            }
+            <text x="21" y="21" text-anchor="middle" class="donut-total">@_total</text>
+            <text x="21" y="26" text-anchor="middle" class="donut-caption">orders</text>
+        </svg>
+
+        <ul class="donut-legend">
+            @foreach (var s in _segments)
+            {
+                <li>
+                    <span class="legend-dot" style="background:@s.Color"></span>
+                    <span class="legend-name">@s.Name</span>
+                    <span class="legend-value">@s.Count <small>(@F(s.Percent)%)</small></span>
+                </li>
+            }
+        </ul>
+    </div>
+}
+
+@code {
+    private sealed record Segment(string Name, int Count, double Percent, double Offset, string Color);
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<OrderTypeShareDto> Slices { get; set; } = [];
+
+    private int _total;
+    private List<Segment> _segments = [];
+
+    protected override void OnParametersSet()
+    {
+        _total = Slices.Sum(s => s.Count);
+        _segments = [];
+
+        var cumulative = 0.0;
+
+        for (var i = 0; i < Slices.Count; i++)
+        {
+            var percent = _total == 0 ? 0 : Slices[i].Count * 100.0 / _total;
+            _segments.Add(new Segment(Slices[i].Name, Slices[i].Count, percent, 25 - cumulative, $"var(--chart-{(i % 5) + 1})"));
+            cumulative += percent;
+        }
+    }
+
+    private static string F(double value) => value.ToString("0.#", CultureInfo.InvariantCulture);
+}

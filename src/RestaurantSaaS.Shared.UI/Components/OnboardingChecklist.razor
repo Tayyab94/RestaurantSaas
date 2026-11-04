@@ -1,0 +1,100 @@
+@inject IOnboardingService Onboarding
+@inject AuthSession Session
+
+@if (_checklist is not null && _checklist.TotalCount > 0 && _checklist.DoneCount < _checklist.TotalCount)
+{
+    var percent = _checklist.DoneCount * 100 / _checklist.TotalCount;
+
+    <div class="card onboarding-card mb-4">
+        <div class="card-header">
+            <div>
+                <div class="fw-semibold">Get your business ready</div>
+                <div class="small text-body-secondary">@_checklist.DoneCount of @_checklist.TotalCount steps done</div>
+            </div>
+            <div class="onboarding-progress" role="progressbar" aria-valuenow="@percent" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress"><div class="progress-bar" style="width: @(percent)%"></div></div>
+            </div>
+        </div>
+
+        @if (_error is not null)
+        {
+            <div class="alert alert-danger m-3 mb-0" role="alert">@_error</div>
+        }
+
+        <ul class="onboarding-steps">
+            @foreach (var step in _checklist.Steps)
+            {
+                <li class="onboarding-step @(step.IsDone ? "is-done" : string.Empty)">
+                    <span class="step-mark"><i class="bi @(step.IsDone ? "bi-check-circle-fill" : "bi-circle")"></i></span>
+                    <div class="step-body">
+                        <div class="step-title">@step.Title</div>
+                        <div class="step-text">@step.Description</div>
+                    </div>
+                    <div class="step-actions">
+                        @if (!step.IsDone && step.Route is not null)
+                        {
+                            <a class="btn btn-sm btn-primary" href="@step.Route">Open</a>
+                        }
+                        else if (!step.IsDone)
+                        {
+                            <span class="badge text-bg-light">Soon</span>
+                        }
+
+                        @if (!step.IsAutomatic && _canManage)
+                        {
+                            <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(_busyKey == step.Key)" @onclick="() => ToggleAsync(step)">
+                                @(step.IsDone ? "Undo" : "Mark done")
+                            </button>
+                        }
+                    </div>
+                </li>
+            }
+        </ul>
+    </div>
+}
+
+@code {
+    private OnboardingChecklistDto? _checklist;
+    private string? _error;
+    private string? _busyKey;
+    private bool _canManage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canManage = Session.Has(Permissions.SettingsManage);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _checklist = await Onboarding.GetChecklistAsync();
+        }
+        catch (ServiceException)
+        {
+            // No permission or no business (the platform administrator): the checklist is simply not shown.
+            _checklist = null;
+        }
+    }
+
+    private async Task ToggleAsync(OnboardingStepDto step)
+    {
+        _error = null;
+        _busyKey = step.Key;
+
+        try
+        {
+            await Onboarding.SetStepAsync(step.Key, !step.IsDone);
+            await LoadAsync();
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busyKey = null;
+        }
+    }
+}

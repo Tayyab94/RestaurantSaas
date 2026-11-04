@@ -1,0 +1,42 @@
+<div class="card stat-card h-100">
+    <div class="card-body">
+        <div class="stat-icon tone-@Tone"><i class="bi @Icon"></i></div>
+        <div class="stat-body">
+            <div class="stat-title">@Title</div>
+            <div class="stat-value">@Value</div>
+            @if (Delta is { } delta)
+            {
+                <div class="stat-delta @(delta >= 0 ? "up" : "down")">
+                    <i class="bi @(delta >= 0 ? "bi-arrow-up-right" : "bi-arrow-down-right")"></i>
+                    @Math.Abs(delta).ToString("0.#")%
+                    <span>vs yesterday</span>
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(Hint))
+            {
+                <div class="stat-hint">@Hint</div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public string Value { get; set; } = string.Empty;
+
+    [Parameter]
+    public string Icon { get; set; } = "bi-activity";
+
+    /// <summary>primary, success, warning, danger or info.</summary>
+    [Parameter]
+    public string Tone { get; set; } = "primary";
+
+    [Parameter]
+    public decimal? Delta { get; set; }
+
+    [Parameter]
+    public string? Hint { get; set; }
+}

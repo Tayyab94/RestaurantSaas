@@ -1,0 +1,19 @@
+<div class="empty-state">
+    <i class="bi @Icon"></i>
+    <div class="empty-title">@Title</div>
+    @if (!string.IsNullOrWhiteSpace(Message))
+    {
+        <div class="empty-message">@Message</div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string Icon { get; set; } = "bi-inbox";
+
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Message { get; set; }
+}

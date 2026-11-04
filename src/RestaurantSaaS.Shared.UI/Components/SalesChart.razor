@@ -1,0 +1,95 @@
+@using System.Globalization
+
+@if (Points.Count == 0)
+{
+    <EmptyState Icon="bi-graph-up" Title="No sales yet" Message="Sales appear here after the first order." />
+}
+else
+{
+    <svg class="chart-svg" viewBox="0 0 @W @H" role="img" aria-label="Sales for the last days" preserveAspectRatio="xMidYMid meet">
+        <defs>
+            <linearGradient id="salesArea" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="var(--chart-1)" stop-opacity="0.35" />
+                <stop offset="100%" stop-color="var(--chart-1)" stop-opacity="0" />
+            </linearGradient>
+        </defs>
+
+        @for (var i = 0; i <= 4; i++)
+        {
+            var y = PadT + (PlotH * i / 4);
+            <line x1="@F(PadL)" x2="@F(W - PadR)" y1="@F(y)" y2="@F(y)" class="chart-grid" />
+            @* <text x="@F(PadL - 8)" y="@F(y + 4)" text-anchor="end" class="chart-label">@Compact(_max * (4 - i) / 4)</text> *@
+        }
+
+        <polygon points="@AreaPoints" fill="url(#salesArea)" />
+        <polyline points="@LinePoints" class="chart-line" fill="none" />
+
+        @foreach (var c in _coords)
+        {
+            <circle cx="@F(c.X)" cy="@F(c.Y)" r="4.5" class="chart-dot">
+                <title>@c.P.Date.ToString("ddd dd MMM", CultureInfo.InvariantCulture): @Currency @c.P.Amount.ToString("N0", CultureInfo.InvariantCulture)</title>
+            </circle>
+            @* <text x="@F(c.X)" y="@F(H - 12)" text-anchor="middle" class="chart-label">@c.P.Date.ToString("ddd", CultureInfo.InvariantCulture)</text> *@
+        }
+    </svg>
+}
+
+@code {
+    private const double W = 640;
+    private const double H = 260;
+    private const double PadL = 56;
+    private const double PadR = 16;
+    private const double PadT = 16;
+    private const double PadB = 36;
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<SalesPointDto> Points { get; set; } = [];
+
+    [Parameter]
+    public string Currency { get; set; } = "PKR";
+
+    private decimal _max;
+    private List<(double X, double Y, SalesPointDto P)> _coords = [];
+
+    private static double PlotW => W - PadL - PadR;
+
+    private static double PlotH => H - PadT - PadB;
+
+    private string LinePoints => string.Join(' ', _coords.Select(c => $"{F(c.X)},{F(c.Y)}"));
+
+    private string AreaPoints => _coords.Count == 0
+        ? string.Empty
+        : $"{F(_coords[0].X)},{F(PadT + PlotH)} {LinePoints} {F(_coords[^1].X)},{F(PadT + PlotH)}";
+
+    protected override void OnParametersSet()
+    {
+        _max = Points.Count == 0 ? 0 : NiceMax(Points.Max(p => p.Amount));
+
+        _coords = Points
+            .Select((p, i) => (
+                X: Points.Count == 1 ? PadL + (PlotW / 2) : PadL + (PlotW * i / (Points.Count - 1)),
+                Y: PadT + PlotH - (_max == 0 ? 0 : (double)(p.Amount / _max) * PlotH),
+                P: p))
+            .ToList();
+    }
+
+    private static decimal NiceMax(decimal value)
+    {
+        if (value <= 0)
+        {
+            return 1;
+        }
+
+        var step = (decimal)Math.Pow(10, Math.Floor(Math.Log10((double)value)) - 1) * 5;
+        return Math.Ceiling(value / step) * step;
+    }
+
+    private static string Compact(decimal value) => value switch
+    {
+        >= 1_000_000 => $"{(value / 1_000_000m).ToString("0.#", CultureInfo.InvariantCulture)}M",
+        >= 1_000 => $"{(value / 1_000m).ToString("0.#", CultureInfo.InvariantCulture)}K",
+        _ => value.ToString("0", CultureInfo.InvariantCulture),
+    };
+
+    private static string F(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+}

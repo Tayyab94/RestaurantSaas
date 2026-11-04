@@ -1,0 +1,23 @@
+@using RestaurantSaaS.Shared.UI
+@using RestaurantSaaS.Shared.UI.Components
+@using RestaurantSaaS.Shared.UI.Layout
+@using RestaurantSaaS.Shared.UI.Pages
+
+<Router AppAssembly="typeof(Program).Assembly" AdditionalAssemblies="new[] { typeof(Marker).Assembly }">
+    <Found Context="routeData">
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)">
+            <NotAuthorized>
+                <RedirectToLogin />
+            </NotAuthorized>
+            <Authorizing>
+                <div class="app-loading">Loading...</div>
+            </Authorizing>
+        </AuthorizeRouteView>
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="typeof(MainLayout)">
+            <NotFoundContent />
+        </LayoutView>
+    </NotFound>
+</Router>

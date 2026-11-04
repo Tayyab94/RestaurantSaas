@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <!-- Every screen, component, layout and style lives here once.
+       The Web host and the MAUI desktop shell both render it.
+       It references Contracts (DTOs, service interfaces) and Domain (permission keys only; Domain has no dependencies). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>RestaurantSaaS.Shared.UI</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Restores Bootstrap and Bootstrap Icons (libman.json) into wwwroot/lib at build time. -->
+    <PackageReference Include="Microsoft.Web.LibraryManager.Build" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\RestaurantSaaS.Contracts\RestaurantSaaS.Contracts.csproj" />
+    <ProjectReference Include="..\RestaurantSaaS.Domain\RestaurantSaaS.Domain.csproj" />
+  </ItemGroup>
+</Project>

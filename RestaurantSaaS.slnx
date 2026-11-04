@@ -1,0 +1,27 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path=".gitignore" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="global.json" />
+    <File Path="README.md" />
+    <File Path="scripts/add-migration.ps1" />
+    <File Path="scripts/update-database.ps1" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/RestaurantSaaS.Contracts/RestaurantSaaS.Contracts.csproj" />
+    <Project Path="src/RestaurantSaaS.Domain/RestaurantSaaS.Domain.csproj" />
+    <Project Path="src/RestaurantSaaS.Application/RestaurantSaaS.Application.csproj" />
+    <Project Path="src/RestaurantSaaS.Infrastructure/RestaurantSaaS.Infrastructure.csproj" />
+    <Project Path="src/RestaurantSaaS.Migrations.SqlServer/RestaurantSaaS.Migrations.SqlServer.csproj" />
+    <Project Path="src/RestaurantSaaS.Migrations.PostgreSql/RestaurantSaaS.Migrations.PostgreSql.csproj" />
+    <Project Path="src/RestaurantSaaS.Shared.UI/RestaurantSaaS.Shared.UI.csproj" />
+    <Project Path="src/RestaurantSaaS.Web/RestaurantSaaS.Web.csproj" />
+    <Project Path="src/RestaurantSaaS.Desktop/RestaurantSaaS.Desktop.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/RestaurantSaaS.UnitTests/RestaurantSaaS.UnitTests.csproj" />
+    <Project Path="tests/RestaurantSaaS.IntegrationTests/RestaurantSaaS.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

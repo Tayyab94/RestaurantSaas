@@ -1,0 +1,90 @@
+@implements IDisposable
+@inject AuthSession Session
+
+<nav class="nav-menu" aria-label="Sections">
+    @foreach (var section in Sections)
+    {
+        var items = section.Items.Where(i => i.Permission is null || Session.Has(i.Permission)).ToList();
+
+        @if (items.Count > 0)
+        {
+            <div class="nav-section">@section.Title</div>
+
+            @foreach (var item in items)
+            {
+                @if (item.Href is null)
+                {
+                    <span class="nav-link disabled" title="Coming in a later module">
+                        <i class="bi @item.Icon"></i>
+                        <span class="nav-text">@item.Text</span>
+                        <span class="nav-soon">Soon</span>
+                    </span>
+                }
+                else
+                {
+                    <NavLink class="nav-link" href="@item.Href" Match="@item.Match" @onclick="OnNavigate">
+                        <i class="bi @item.Icon"></i>
+                        <span class="nav-text">@item.Text</span>
+                    </NavLink>
+                }
+            }
+        }
+    }
+    @if (Session.User is { IsSuperAdmin: false } user && user.Permissions.Count == 0)
+    {
+        <div class="nav-empty">No permissions are assigned to your role. Ask the business owner.</div>
+    }
+    @if (System.Diagnostics.Debugger.IsAttached && Session.User is { } debugUser)
+    {
+        <div class="nav-empty">@debugUser.UserName: @debugUser.Permissions.Count permissions</div>
+    }
+</nav>
+
+@code {
+    [Parameter]
+    public EventCallback OnNavigate { get; set; }
+
+    protected override void OnInitialized() => Session.Changed += OnSessionChanged;
+
+    private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Session.Changed -= OnSessionChanged;
+
+    private sealed record NavItem(string Text, string Icon, string? Permission = null, string? Href = null, NavLinkMatch Match = NavLinkMatch.Prefix);
+
+    private sealed record NavSection(string Title, NavItem[] Items);
+
+    // Items without a Href are shown as "Soon" until their module is built. Items need their permission to be visible.
+    private static readonly NavSection[] Sections =
+    [
+        new("Overview",
+        [
+            new("Dashboard", "bi-speedometer2", Permissions.DashboardView, "", NavLinkMatch.All),
+        ]),
+        new("Operations",
+        [
+            new("Orders", "bi-receipt", Permissions.OrderView),
+            new("Tables", "bi-grid-3x3-gap", Permissions.TableView),
+            new("Kitchen", "bi-fire", Permissions.OrderView),
+            new("Delivery", "bi-bicycle", Permissions.OrderView),
+        ]),
+        new("Management",
+        [
+            new("Menu", "bi-book", Permissions.MenuView),
+            new("Customers", "bi-people", Permissions.OrderView),
+            new("Inventory", "bi-box-seam", Permissions.MenuManage),
+            new("Suppliers", "bi-truck", Permissions.MenuManage),
+            new("Reports", "bi-bar-chart-line", Permissions.ReportView),
+        ]),
+        new("Administration",
+        [
+            new("Users", "bi-person-badge", Permissions.UserView, "admin/users"),
+            new("Login history", "bi-clock-history", Permissions.UserView, "admin/login-history"),
+            new("Roles", "bi-shield-check", Permissions.RoleView, "admin/roles"),
+            new("Audit log", "bi-journal-text", Permissions.AuditLogView, "admin/audit-log"),
+            new("Tenants", "bi-buildings", Permissions.TenantView, "admin/tenants"),
+            new("Settings", "bi-gear", Permissions.SettingsView),
+            new("License", "bi-key", Permissions.LicenseView),
+        ]),
+    ];
+}

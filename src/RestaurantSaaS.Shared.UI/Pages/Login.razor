@@ -1,0 +1,196 @@
+@page "/login"
+@layout AuthLayout
+@attribute [AllowAnonymous]
+@inject AuthSession Session
+@inject ISetupService Setup
+@inject NavigationManager Navigation
+
+<PageTitle>Sign in | RestoPOS</PageTitle>
+
+<div class="card auth-card">
+    <form class="card-body p-4 p-md-5" @onsubmit="SignInAsync">
+        <h1 class="auth-title">Welcome back</h1>
+        <p class="auth-subtitle">Sign in to continue to your restaurant.</p>
+
+        @if (!string.IsNullOrEmpty(Changed))
+        {
+            <div class="alert alert-success" role="alert">Your password was changed. Please sign in again.</div>
+        }
+
+        @if (!string.IsNullOrEmpty(Expired))
+        {
+            <div class="alert alert-info" role="alert">You were signed out because you were inactive. Please sign in again.</div>
+        }
+
+        @if (_error is not null)
+        {
+            <div class="alert alert-danger" role="alert">
+                @_error
+                @if (_fieldErrors.Count > 0)
+                {
+                    <ul class="mb-0 mt-2">
+                        @foreach (var message in _fieldErrors)
+                        {
+                            <li>@message</li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+
+        <div class="btn-group w-100 mb-3" role="group" aria-label="Sign-in method">
+            <button type="button" class="btn @(_usePin ? "btn-outline-primary" : "btn-primary")" @onclick="() => SelectMode(false)">Password</button>
+            <button type="button" class="btn @(_usePin ? "btn-primary" : "btn-outline-primary")" @onclick="() => SelectMode(true)">PIN</button>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="business">Business code</label>
+            <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-shop"></i></span>
+                <input id="business" class="form-control" autocomplete="organization"
+                       placeholder="@(_usePin ? "Your business code" : "Leave empty for the platform administrator")" @bind="_businessCode" />
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="username">Username</label>
+            <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-person"></i></span>
+                <input id="username" class="form-control" autocomplete="username" @bind="_userName" />
+            </div>
+        </div>
+
+        @if (_usePin)
+        {
+            <div class="mb-4">
+                <label class="form-label" for="pin">PIN</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-123"></i></span>
+                    <input id="pin" type="password" inputmode="numeric" maxlength="6" class="form-control" autocomplete="off" @bind="_pin" />
+                </div>
+                <div class="form-text">The 4 to 6 digit PIN your manager gave you.</div>
+            </div>
+        }
+        else
+        {
+            <div class="mb-2">
+                <label class="form-label" for="password">Password</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                    <input id="password" type="password" class="form-control" autocomplete="current-password" @bind="_password" />
+                </div>
+            </div>
+            <div class="text-end mb-4"><a href="forgot-password">Forgot password?</a></div>
+        }
+
+        <button type="submit" class="btn btn-primary w-100 py-2" disabled="@_busy">
+            @(_busy ? "Signing in..." : "Sign in")
+        </button>
+
+        @if (_setup is null || _setup.AllowsRegistration)
+        {
+            <p class="text-center text-body-secondary mt-4 mb-0">
+                New business? <a href="register">Create an account</a>
+            </p>
+        }
+    </form>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Business { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Changed { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Expired { get; set; }
+
+    private SetupStatusDto? _setup;
+    private string? _businessCode;
+    private string? _userName;
+    private string? _password;
+    private string? _pin;
+    private bool _usePin;
+    private string? _error;
+    private List<string> _fieldErrors = [];
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _businessCode = Business;
+        await Session.InitializeAsync();
+
+        if (Session.IsAuthenticated)
+        {
+            Navigation.NavigateTo(Target(), replace: true);
+            return;
+        }
+
+        try
+        {
+            _setup = await Setup.GetStatusAsync();
+
+            // First run of a desktop or on-premise installation: no business yet, so go to the setup screen.
+            if (_setup.DeploymentMode != "Cloud" && !_setup.HasBusiness)
+            {
+                Navigation.NavigateTo("setup", replace: true);
+                return;
+            }
+
+            // These installations have one business, so its code is filled in.
+            if (string.IsNullOrWhiteSpace(_businessCode) && _setup.SingleBusinessCode is not null)
+            {
+                _businessCode = _setup.SingleBusinessCode;
+            }
+        }
+        catch (ServiceException)
+        {
+            // The status is only a convenience; the sign-in itself still works.
+        }
+    }
+
+    private void SelectMode(bool usePin)
+    {
+        _usePin = usePin;
+        _error = null;
+        _fieldErrors = [];
+    }
+
+    private async Task SignInAsync()
+    {
+        _error = null;
+        _fieldErrors = [];
+        _busy = true;
+
+        try
+        {
+            if (_usePin)
+            {
+                await Session.SignInWithPinAsync(new PinLoginRequest(_businessCode ?? string.Empty, _userName ?? string.Empty, _pin ?? string.Empty));
+            }
+            else
+            {
+                await Session.SignInAsync(new LoginRequest(_businessCode, _userName ?? string.Empty, _password ?? string.Empty));
+            }
+
+            _password = null;
+            _pin = null;
+            Navigation.NavigateTo(Target(), replace: true);
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+            _fieldErrors = ex.Errors.SelectMany(e => e.Value).ToList();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private string Target() => ReturnUrlHelper.Resolve(ReturnUrl);
+}

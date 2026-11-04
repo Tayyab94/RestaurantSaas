@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1f4e5f" />
+    <base href="/" />
+    <link rel="stylesheet" href="_content/RestaurantSaaS.Shared.UI/lib/bootstrap/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="_content/RestaurantSaaS.Shared.UI/lib/bootstrap-icons/font/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="_content/RestaurantSaaS.Shared.UI/css/app.css" />
+    <HeadOutlet @rendermode="NoPrerender" />
+</head>
+
+<body>
+    <Routes @rendermode="NoPrerender" />
+
+    <div id="blazor-error-ui">
+        An unexpected error occurred.
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss">x</a>
+    </div>
+
+    <script src="_content/RestaurantSaaS.Shared.UI/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="_content/RestaurantSaaS.Shared.UI/js/app.js"></script>
+    <script src="_framework/blazor.web.js"></script>
+</body>
+
+</html>
+
+@code {
+    // Pages are interactive from the first render; no prerender avoids duplicate data loading and JS interop errors.
+    private static readonly IComponentRenderMode NoPrerender = new InteractiveServerRenderMode(prerender: false);
+}
