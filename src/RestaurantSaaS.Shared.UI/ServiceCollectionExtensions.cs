@@ -18,6 +18,8 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddSharedUi(this IServiceCollection services)
     {
         services.AddScoped<ThemeService>();
+        services.AddScoped<LicenseStateService>();
+
         services.TryAddSingleton<AuthSessionOptions>();
         services.AddScoped<AuthSession>();
         services.AddScoped<ISessionAccessor>(provider => provider.GetRequiredService<AuthSession>());
@@ -54,6 +56,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRoleService, RemoteRoleService>();
         services.AddScoped<IApprovalService, RemoteApprovalService>();
         services.AddScoped<IAuditService, RemoteAuditService>();
+        services.AddScoped<ILicenseService, RemoteLicenseService>();
 
         return services;
     }

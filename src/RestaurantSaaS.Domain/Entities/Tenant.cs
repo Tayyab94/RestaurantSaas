@@ -80,5 +80,15 @@ public sealed class Tenant : BaseEntity
         Name = name.Trim();
     }
 
+
+    /// <summary>A paid license or subscription was activated: the business leaves the trial.</summary>
+    public void Activate()
+    {
+        if (Status == TenantStatus.Trial)
+        {
+            Status = TenantStatus.Active;
+        }
+    }
+
     public bool CanSignIn => Status is TenantStatus.Trial or TenantStatus.Active;
 }

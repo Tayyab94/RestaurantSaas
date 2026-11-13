@@ -30,6 +30,17 @@ public static class DependencyInjection
         services.TryAddSingleton<IVerificationSender, LoggingVerificationSender>();
         services.AddScoped<AuditingInterceptor>();
 
+        // ADD after services.AddScoped<AuditingInterceptor>();
+        var license = configuration.GetSection(LicenseOptions.SectionName).Get<LicenseOptions>() ?? new LicenseOptions();
+        services.AddSingleton(license);
+        services.AddSingleton<LicenseKeyStore>();
+        services.AddSingleton<ILicenseSigner>(provider => provider.GetRequiredService<LicenseKeyStore>());
+        services.AddSingleton<ILicenseKeyRing>(provider => provider.GetRequiredService<LicenseKeyStore>());
+        services.AddSingleton<IMachineFingerprint, MachineFingerprintProvider>();
+        services.AddSingleton<ILicenseFileStore, FileLicenseStore>();
+
+
+
         services.AddDbContext<AppDbContext>((provider, builder) =>
         {
             if (options.IsPostgreSql)

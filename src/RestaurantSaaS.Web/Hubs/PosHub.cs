@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
-
+using RestaurantSaaS.Application.Abstractions;   // ADD
 namespace RestaurantSaaS.Web.Hubs;
 
 /// <summary>What the server can push to clients (kitchen, counter, waiters). Grows with module M13.</summary>
@@ -27,6 +27,19 @@ public static class HubGroups
 /// is added with module M13.
 /// </summary>
 [Authorize]
-public sealed class PosHub : Hub<IPosHubClient>
+public sealed class PosHub(ILicenseGate licenseGate) : Hub<IPosHubClient>   // CHANGE
 {
+    public override async Task OnConnectedAsync()
+    {
+        try
+        {
+            await licenseGate.EnsureCanSellAsync(Context.ConnectionAborted);
+        }
+        catch (RestaurantSaaS.Application.Common.Exceptions.LicenseException ex)
+        {
+            throw new HubException(ex.Message);
+        }
+
+        await base.OnConnectedAsync();
+    }
 }

@@ -7,6 +7,7 @@ using RestaurantSaaS.Application.Features.Auth;
 using RestaurantSaaS.Application.Messaging;
 using RestaurantSaaS.Application.Services;
 using RestaurantSaaS.Contracts.Services;
+using RestaurantSaaS.Application.Features.Licensing;
 
 namespace RestaurantSaaS.Application;
 
@@ -24,10 +25,22 @@ public static class DependencyInjection
         services.AddScoped<AuditTrail>();
         services.TryAddScoped<IRequestInfo, NullRequestInfo>();
         services.AddScoped<TenantProvisioner>();
+        services.AddSingleton<LicenseStateCache>();
+        services.AddScoped<LicenseServerService>();
+        services.AddScoped<LicenseChecker>();
+        services.AddScoped<ILicenseGate, LicenseGate>();
+        services.AddScoped<ILicenseServerClient>(provider =>
+            provider.GetRequiredService<LicenseOptions>().ServerMode == LicenseServerMode.Embedded
+                ? ActivatorUtilities.CreateInstance<EmbeddedLicenseServerClient>(provider)
+                : ActivatorUtilities.CreateInstance<HttpLicenseServerClient>(provider));
+
         services.AddValidatorsFromAssembly(assembly, includeInternalTypes: true);
 
         // Order matters: the first registered behavior runs first (authorization, then validation).
         services.AddScoped(typeof(IPipelineBehavior<,>), typeof(AuthorizationBehavior<,>));
+        // ADD right after the AuthorizationBehavior line (before the validation behavior):
+        services.AddScoped(typeof(IPipelineBehavior<,>), typeof(LicenseBehavior<,>));
+
         services.AddScoped(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 
         foreach (var type in assembly.GetTypes().Where(t => t is { IsAbstract: false, IsInterface: false }))
@@ -56,6 +69,7 @@ public static class DependencyInjection
         services.AddScoped<IRoleService, LocalRoleService>();
         services.AddScoped<IApprovalService, LocalApprovalService>();
         services.AddScoped<IAuditService, LocalAuditService>();
+        services.AddScoped<ILicenseService, LocalLicenseService>();
         return services;
     }
 }

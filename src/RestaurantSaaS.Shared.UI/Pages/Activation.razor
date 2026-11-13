@@ -1,0 +1,169 @@
+@page "/activate"
+@layout AuthLayout
+@attribute [AllowAnonymous]
+@inject ILicenseService Licenses
+@inject ISetupService Setup
+@inject LicenseStateService State
+@inject NavigationManager Navigation
+
+<PageTitle>Activate | RestoPOS</PageTitle>
+
+<div class="card auth-card">
+    <div class="card-body p-4 p-md-5">
+        <h1 class="auth-title">Activate RestoPOS</h1>
+        <p class="auth-subtitle">Enter your license key, or try RestoPOS free for 14 days.</p>
+
+
+        @if (_status?.State == LicenseState.NotActivated)
+        {
+            <div class="alert alert-warning" role="alert">
+                <i class="bi bi-lock me-1"></i>
+                RestoPOS cannot be used on this PC until it is activated. Enter a license key to continue.
+            </div>
+        }
+
+
+        @if (_status is { BlocksSelling: true } && _status.State != LicenseState.NotActivated)
+        {
+            <div class="alert alert-danger" role="alert">@_status.Message</div>
+        }
+
+        @if (_error is not null)
+        {
+            <div class="alert alert-danger" role="alert">
+                @_error
+                @if (_fieldErrors.Count > 0)
+                {
+                    <ul class="mb-0 mt-2">
+                        @foreach (var message in _fieldErrors)
+                        {
+                            <li>@message</li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+
+        <div class="btn-group w-100 mb-4" role="group" aria-label="Activation method">
+            <button type="button" class="btn @(_trial ? "btn-outline-primary" : "btn-primary")" @onclick="() => Select(false)">I have a license key</button>
+            <button type="button" class="btn @(_trial ? "btn-primary" : "btn-outline-primary")" @onclick="() => Select(true)">Start free trial</button>
+        </div>
+
+        @if (!_trial)
+        {
+            <form @onsubmit="ActivateAsync" @onsubmit:preventDefault>
+                <div class="mb-3">
+                    <label class="form-label" for="key">License key</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-key"></i></span>
+                        <input id="key" class="form-control text-uppercase" placeholder="XXXXX-XXXXX-XXXXX-XXXXX" autocomplete="off" maxlength="40" @bind="_key" />
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label" for="name">Name of the license holder</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-person"></i></span>
+                        <input id="name" class="form-control" placeholder="Your name or business name" @bind="_userName" />
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100 py-2" disabled="@_busy">@(_busy ? "Activating..." : "Activate")</button>
+            </form>
+        }
+        else
+        {
+            <form @onsubmit="StartTrialAsync" @onsubmit:preventDefault>
+                <div class="mb-3">
+                    <label class="form-label" for="tname">Your name</label>
+                    <input id="tname" class="form-control" @bind="_userName" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="tphone">Phone number</label>
+                    <input id="tphone" class="form-control" inputmode="tel" placeholder="0300 1234567" @bind="_phone" />
+                    <div class="form-text">One free trial is given for each PC, phone number and email.</div>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label" for="temail">Email (optional)</label>
+                    <input id="temail" type="email" class="form-control" @bind="_email" />
+                </div>
+                <button type="submit" class="btn btn-primary w-100 py-2" disabled="@_busy">@(_busy ? "Starting..." : "Start 14-day trial")</button>
+            </form>
+        }
+
+        <p class="text-center text-body-secondary mt-4 mb-0">
+            <a href="login">Back to sign in</a>
+        </p>
+    </div>
+</div>
+
+@code {
+    private LicenseStatusDto? _status;
+    private bool _trial;
+    private bool _busy;
+    private string? _key;
+    private string? _userName;
+    private string? _phone;
+    private string? _email;
+    private string? _error;
+    private List<string> _fieldErrors = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var setup = await Setup.GetStatusAsync();
+            if (setup.DeploymentMode == "Cloud")
+            {
+                Navigation.NavigateTo("login", replace: true);
+                return;
+            }
+
+            _status = await Licenses.GetStatusAsync();
+
+            if (_status.State is LicenseState.Trial or LicenseState.Active or LicenseState.Expiring or LicenseState.Grace)
+            {
+                Navigation.NavigateTo("login", replace: true);
+            }
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private void Select(bool trial)
+    {
+        _trial = trial;
+        _error = null;
+        _fieldErrors = [];
+    }
+
+    private async Task ActivateAsync() =>
+        await RunAsync(async () => await Licenses.ActivateAsync(new ActivateLicenseRequest(_key ?? string.Empty, _userName ?? string.Empty)));
+
+    private async Task StartTrialAsync() =>
+        await RunAsync(async () => await Licenses.StartTrialAsync(new StartTrialRequest(_userName ?? string.Empty, _phone ?? string.Empty, _email)));
+
+    private async Task RunAsync(Func<Task<LicenseStatusDto>> action)
+    {
+        _error = null;
+        _fieldErrors = [];
+        _busy = true;
+
+        try
+        {
+            var status = await action();
+            State.Set(status);
+            _key = null;
+            Navigation.NavigateTo("login", replace: true);
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+            _fieldErrors = ex.Errors.SelectMany(e => e.Value).ToList();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

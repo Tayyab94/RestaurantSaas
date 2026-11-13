@@ -40,6 +40,10 @@ public static class Permissions
 
     public const string PlatformModule = "Platform";
 
+    // ADD after LicenseActivate constant:
+public const string LicenseGenerate = "License.Generate";
+
+    public const string LicenseDeactivate = "License.Deactivate";
     public static IReadOnlyList<PermissionInfo> All { get; } =
     [
         new(DashboardView, "Dashboard", "View the dashboard"),
@@ -65,5 +69,8 @@ public static class Permissions
         new(ReportView, "Reports", "View reports"),
         new(LicenseView, "License", "View the license"),
         new(LicenseActivate, "License", "Activate or renew the license"),
+        // ADD in the All catalog list after the LicenseActivate line:
+        new(LicenseGenerate, PlatformModule, "Make and list license keys"),
+        new(LicenseDeactivate, "License", "Deactivate the license of this PC"),
     ];
 }

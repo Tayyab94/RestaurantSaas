@@ -6,6 +6,8 @@
 @inject ISetupService Setup
 @inject AuthSession Session
 @inject NavigationManager Navigation
+@inject ILicenseService Licenses
+
 
 <PageTitle>@Title | RestoPOS</PageTitle>
 
@@ -150,6 +152,11 @@
         {
             _status = await Setup.GetStatusAsync();
 
+            if (_status.DeploymentMode != "Cloud" && (await Licenses.GetStatusAsync()).State == LicenseState.NotActivated)
+            {
+                Navigation.NavigateTo("activate", replace: true);
+                return;
+            }
             if (!_status.AllowsRegistration)
             {
                 // Already set up: nobody can add a second business here.
