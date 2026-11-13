@@ -12,7 +12,7 @@ public static class ApiEndpoints
     {
         // Sign-in, registration and token refresh are open; the handlers themselves decide what is allowed.
         app.MapAuthEndpoints();
-
+        app.MapLicenseOpenEndpoints();      // ADD
         // Everything else needs a valid token (and, inside the handlers, the right permission).
         var secured = app.MapGroup("/api/v1").RequireAuthorization();
         secured.MapAccountEndpoints();
@@ -21,6 +21,7 @@ public static class ApiEndpoints
         secured.MapDashboardEndpoints();
         secured.MapOnboardingEndpoints();
         secured.MapRoleEndpoints();
+        secured.MapLicenseEndpoints();      // ADD
 
         return app;
     }

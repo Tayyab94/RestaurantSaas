@@ -24,16 +24,9 @@ else
 
         <div class="sidebar-footer">
             @* Static placeholder: replaced by the real license state in module M04. *@
-            <div class="license-card">
-                <div class="d-flex align-items-center justify-content-between">
-                    <span class="license-label">License</span>
-                    <span class="badge text-bg-warning">Trial</span>
+                <div class="sidebar-footer">
+                    <LicenseCard />
                 </div>
-                <div class="license-days">14 days left</div>
-                <div class="progress" role="progressbar" aria-label="License days left" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
-                    <div class="progress-bar" style="width: 100%"></div>
-                </div>
-            </div>
         </div>
     </aside>
 
@@ -92,6 +85,9 @@ else
                     <a class="btn btn-sm btn-warning ms-auto" href="account/change-password">Change password</a>
                 </div>
             }
+
+                <LicenseLock />
+                <LicenseBanner />
 
             @Body
         </main>

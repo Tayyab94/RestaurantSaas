@@ -4,6 +4,9 @@
 @inject AuthSession Session
 @inject ISetupService Setup
 @inject NavigationManager Navigation
+@inject ILicenseService Licenses
+
+
 
 <PageTitle>Sign in | RestoPOS</PageTitle>
 
@@ -134,6 +137,11 @@
         {
             _setup = await Setup.GetStatusAsync();
 
+            if (_setup.DeploymentMode != "Cloud" && (await Licenses.GetStatusAsync()).State == LicenseState.NotActivated)
+            {
+                Navigation.NavigateTo("activate", replace: true);
+                return;
+            }
             // First run of a desktop or on-premise installation: no business yet, so go to the setup screen.
             if (_setup.DeploymentMode != "Cloud" && !_setup.HasBusiness)
             {

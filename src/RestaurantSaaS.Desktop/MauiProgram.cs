@@ -62,7 +62,17 @@ public static class MauiProgram
             ["Database:Provider"] = settings.DatabaseProvider,
             ["Database:ConnectionString"] = settings.ConnectionString,
         };
-
+        values["License:ServerMode"] = "Remote";
+        values["License:ServerUrl"] = Preferences.Default.Get("license_server_url", string.Empty);
+        values["License:TrustedKeys:k1"] = Preferences.Default.Get("license_public_key", string.Empty);
+#if DEBUG
+        values["License:ServerMode"] = "Embedded";
+        values["License:ServerEnabled"] = "true";
+        values["License:KeyPepper"] = "dev-only-pepper-change-me";
+        values["License:AllowDevSigningKey"] = "true";
+        // (existing Verification:LogCodes and Seed lines stay here)
+#endif
+ 
 #if DEBUG
         // Development sign-ins, as in the web project. Never compiled into a release build.
         values["Verification:LogCodes"] = "true";
@@ -70,6 +80,7 @@ public static class MauiProgram
         values["Seed:DemoData"] = "true";
         values["Seed:DemoOwnerPassword"] = "Demo@12345";
 #endif
+
 
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(values).Build();
 

@@ -64,6 +64,32 @@ public static class DatabaseSeeder
         await db.SaveChangesAsync(ct);
     }
 
+    // ADD new method (above the SuperAdmin seeding method):
+    public static async Task EnsureDefaultPlanAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        if (await db.Set<Plan>().AnyAsync(p => p.Code == "STANDARD", ct))
+        {
+            return;
+        }
+
+        db.Set<Plan>().Add(new Plan
+        {
+            Name = "Standard",
+            Code = "STANDARD",
+            Description = "All modules of Release 1.0 for one business.",
+            MonthlyPrice = 0,
+            YearlyPrice = 0,
+            CurrencyCode = "PKR",
+            MaxBranches = 1,
+            MaxUsers = 20,
+            MaxDevices = 3,
+            IsActive = true,
+            SortOrder = 1,
+        });
+
+        await db.SaveChangesAsync(ct);
+    }
+
     /// <summary>Creates the default SuperAdmin once, only when a password is configured. It must change the password at first sign-in.</summary>
     public static async Task EnsureSuperAdminAsync(
         AppDbContext db,

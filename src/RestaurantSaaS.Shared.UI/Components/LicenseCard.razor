@@ -1,0 +1,68 @@
+@implements IDisposable
+@inject LicenseStateService State
+
+@if (State.Current is { State: not LicenseState.NotRequired } status)
+{
+    <a class="license-card d-block text-decoration-none" href="license">
+        <div class="d-flex align-items-center justify-content-between">
+            <span class="license-label">License</span>
+            <span class="badge @BadgeCss(status)">@Label(status)</span>
+        </div>
+        <div class="license-days">@Headline(status)</div>
+        @if (status.DaysLeft is { } days && status.State is LicenseState.Trial or LicenseState.Expiring or LicenseState.Active)
+        {
+            var total = status.State == LicenseState.Trial ? 14 : 30;
+            var percent = Math.Clamp(days * 100 / total, 0, 100);
+            <div class="progress" role="progressbar" aria-label="License days left" aria-valuenow="@percent" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-bar" style="width: @(percent)%"></div>
+            </div>
+        }
+    </a>
+}
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        State.Changed += OnChanged;
+
+        if (State.Current is null)
+        {
+            await State.RefreshAsync();
+        }
+
+        State.StartAutoRefresh();
+    }
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => State.Changed -= OnChanged;
+
+    private static string Label(LicenseStatusDto s) => s.State switch
+    {
+        LicenseState.Trial => "Trial",
+        LicenseState.Active => s.LicenseType,
+        LicenseState.Expiring => "Ends soon",
+        LicenseState.Grace => "Ended",
+        LicenseState.Expired => "Expired",
+        LicenseState.NotActivated => "Not active",
+        _ => "Problem",
+    };
+
+    private static string BadgeCss(LicenseStatusDto s) => s.Level switch
+    {
+        "success" => "text-bg-success",
+        "info" => "text-bg-info",
+        "warning" => "text-bg-warning",
+        _ => "text-bg-danger",
+    };
+
+    private static string Headline(LicenseStatusDto s) => s.State switch
+    {
+        LicenseState.Trial or LicenseState.Expiring => s.DaysLeft == 1 ? "1 day left" : $"{s.DaysLeft} days left",
+        LicenseState.Active => s.ExpiresAtUtc is null ? "Lifetime" : $"Until {s.ExpiresAtUtc:dd MMM yyyy}",
+        LicenseState.Grace => $"{s.GraceDaysLeft} days to renew",
+        LicenseState.Expired => "Selling is blocked",
+        LicenseState.NotActivated => "Activate now",
+        _ => "Open for details",
+    };
+}

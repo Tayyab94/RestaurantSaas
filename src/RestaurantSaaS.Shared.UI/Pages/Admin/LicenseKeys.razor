@@ -1,0 +1,299 @@
+@page "/admin/license-keys"
+@attribute [Authorize(Policy = Permissions.LicenseGenerate)]
+@inject ILicenseService Licenses
+
+<PageTitle>License keys | RestoPOS</PageTitle>
+
+<PageHeader Title="License keys" Subtitle="Platform administration: make keys and see where they are used" />
+
+<div class="card mb-4">
+    <div class="card-header"><span class="fw-semibold">Make a batch of keys</span></div>
+    <form class="card-body" @onsubmit="GenerateAsync" @onsubmit:preventDefault>
+        @if (_error is not null)
+        {
+            <div class="alert alert-danger" role="alert">
+                @_error
+                @foreach (var message in _fieldErrors)
+                {
+                    <div>@message</div>
+                }
+            </div>
+        }
+
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label" for="type">Type</label>
+                <select id="type" class="form-select" @bind="_type">
+                    <option value="Months6">6 months</option>
+                    <option value="Months12">12 months</option>
+                    <option value="Lifetime">Lifetime</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="plan">Plan</label>
+                <select id="plan" class="form-select" @bind="_planId">
+                    @foreach (var plan in _plans)
+                    {
+                        <option value="@plan.Id">@plan.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" for="qty">How many</label>
+                <input id="qty" type="number" min="1" max="500" class="form-control" @bind="_quantity" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" for="act">PCs per key</label>
+                <input id="act" type="number" min="1" max="10" class="form-control" @bind="_maxActivations" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" for="dev">Devices</label>
+                <input id="dev" type="number" min="1" max="100" class="form-control" @bind="_maxDevices" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" for="br">Branches</label>
+                <input id="br" type="number" min="1" max="100" class="form-control" @bind="_maxBranches" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="price">Sold price (optional)</label>
+                <input id="price" type="number" min="0" step="0.01" class="form-control" @bind="_price" />
+            </div>
+            <div class="col-md-7">
+                <label class="form-label" for="notes">Notes (optional)</label>
+                <input id="notes" class="form-control" maxlength="1000" @bind="_notes" />
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100" disabled="@(_busy || _plans.Count == 0)">@(_busy ? "Making..." : "Make keys")</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+@if (_generated is not null)
+{
+    <div class="card mb-4 border-warning">
+        <div class="card-header">
+            <span class="fw-semibold">Batch @_generated.BatchNumber</span>
+            <span class="badge text-bg-warning ms-auto">Shown only once</span>
+        </div>
+        <div class="card-body">
+            <p class="text-body-secondary">Copy these keys now. Only a hash is stored, so they cannot be shown again.</p>
+            <textarea class="form-control font-monospace" rows="@Math.Min(_generated.Keys.Count + 1, 12)" readonly>@string.Join("\n", _generated.Keys)</textarea>
+        </div>
+    </div>
+}
+
+<div class="card">
+    <div class="card-header gap-2">
+        <form class="table-search" @onsubmit="SearchAsync" @onsubmit:preventDefault>
+            <i class="bi bi-search"></i>
+            <input type="search" class="form-control form-control-sm" placeholder="Search by last 4 characters or holder" @bind="_search" aria-label="Search keys" />
+        </form>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 data-table">
+            <thead>
+                <tr>
+                    <th>Key</th>
+                    <th>Type</th>
+                    <th>Plan</th>
+                    <th><button type="button" class="sort-btn" @onclick='() => SortByAsync("status")'>Status @SortIcon("status")</button></th>
+                    <th>Used</th>
+                    <th>Holder</th>
+                    <th><button type="button" class="sort-btn" @onclick='() => SortByAsync("expiresAt")'>Ends @SortIcon("expiresAt")</button></th>
+
+                      @*  <th class="text-end"><button type="button" class="sort-btn" @onclick='() => SortByAsync("createdAt")'>Made @SortIcon("createdAt")</button></th> *@
+
+                    <th><button type="button" class="sort-btn" @onclick='() => SortByAsync("createdAt")'>Made @SortIcon("createdAt")</button></th>
+                    <th class="text-end">PCs</th>
+                    </tr>
+            </thead>
+            <tbody>
+                @if (_result is null || _loading)
+                {
+                    <tr><td colspan="9" class="text-center py-5 text-body-secondary">Loading...</td></tr>
+                }
+                else if (_result.Items.Count == 0)
+                {
+                    <tr><td colspan="9"><EmptyState Icon="bi-key" Title="No keys yet" Message="Make a batch above." /></td></tr>
+                }
+                else
+                {
+                    @foreach (var key in _result.Items)
+                    {
+                        <tr>
+                            <td class="font-monospace">…@key.KeyHint</td>
+                            <td>@key.LicenseType</td>
+                            <td>@key.PlanName</td>
+                            <td><span class="badge @StatusCss(key.Status)">@key.Status</span></td>
+                            <td>@key.ActivationCount / @key.MaxActivations</td>
+                            <td>@key.LicensedUserName</td>
+                            <td>@(key.ExpiresAt?.ToLocalTime().ToString("dd MMM yyyy") ?? "-")</td>
+                       @*      <td class="text-end text-body-secondary">@key.CreatedAt.ToLocalTime().ToString("dd MMM yyyy")</td> *@
+
+                            <td class="text-body-secondary">@key.CreatedAt.ToLocalTime().ToString("dd MMM yyyy")</td>
+                            <td class="text-end">
+                                @if (key.ActivationCount > 0)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(_resetting == key.Id)" @onclick="() => ResetAsync(key)">@(_resetting == key.Id ? "Freeing..." : "Free PCs")
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card-footer">
+        <Pager Page="_page" PageSize="_pageSize" TotalCount="_result?.TotalCount ?? 0"
+               PageChanged="PageChangedAsync" PageSizeChanged="PageSizeChangedAsync" />
+    </div>
+</div>
+
+@code {
+    private IReadOnlyList<PlanOptionDto> _plans = [];
+    private PagedResult<LicenseKeyListItemDto>? _result;
+    private GeneratedLicenseKeysDto? _generated;
+    private string? _error;
+    private List<string> _fieldErrors = [];
+    private bool _busy;
+    private bool _loading;
+    private string _type = "Months12";
+    private Guid _planId;
+    private int _quantity = 1;
+    private int _maxActivations = 1;
+    private int _maxDevices = 3;
+    private int _maxBranches = 1;
+    private decimal? _price;
+    private string? _notes;
+    private int _page = 1;
+    private int _pageSize = PageRequest.DefaultPageSize;
+    private string? _search;
+    private string _sort = "createdAt";
+    private bool _desc = true;
+    private Guid? _resetting;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _plans = await Licenses.GetPlansAsync();
+            _planId = _plans.FirstOrDefault()?.Id ?? Guid.Empty;
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task GenerateAsync()
+    {
+        _error = null;
+        _fieldErrors = [];
+        _busy = true;
+
+        try
+        {
+            _generated = await Licenses.GenerateKeysAsync(new GenerateLicenseKeysRequest(
+                _type, _planId, _quantity, _maxActivations, _maxDevices, _maxBranches, _notes, _price));
+            _page = 1;
+            await LoadAsync();
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+            _fieldErrors = ex.Errors.SelectMany(e => e.Value).ToList();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+
+    /// Frees every PC of a key (lost or broken PC). The owner can activate the key again.
+    private async Task ResetAsync(LicenseKeyListItemDto key)
+    {
+        _error = null;
+        _resetting = key.Id;
+
+        try
+        {
+            await Licenses.ResetKeyAsync(key.Id);
+            await LoadAsync();
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _resetting = null;
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+
+        try
+        {
+            _result = await Licenses.GetKeysPageAsync(new PageRequest(_page, _pageSize, _sort, _desc, _search));
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Task SearchAsync()
+    {
+        _page = 1;
+        return LoadAsync();
+    }
+
+    private Task SortByAsync(string column)
+    {
+        _desc = _sort == column && !_desc;
+        _sort = column;
+        _page = 1;
+        return LoadAsync();
+    }
+
+    private Task PageChangedAsync(int page)
+    {
+        _page = page;
+        return LoadAsync();
+    }
+
+    private Task PageSizeChangedAsync(int size)
+    {
+        _pageSize = size;
+        _page = 1;
+        return LoadAsync();
+    }
+
+    private MarkupString SortIcon(string column) =>
+        _sort != column
+            ? new MarkupString("<i class=\"bi bi-arrow-down-up sort-idle\"></i>")
+            : new MarkupString(_desc ? "<i class=\"bi bi-sort-down\"></i>" : "<i class=\"bi bi-sort-up\"></i>");
+
+    private static string StatusCss(string status) => status switch
+    {
+        "Active" => "text-bg-success",
+        "Unused" => "text-bg-secondary",
+        "Expired" => "text-bg-warning",
+        "Revoked" or "Suspended" => "text-bg-danger",
+        _ => "text-bg-secondary",
+    };
+}

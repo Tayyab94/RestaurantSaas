@@ -84,7 +84,8 @@
             new("Audit log", "bi-journal-text", Permissions.AuditLogView, "admin/audit-log"),
             new("Tenants", "bi-buildings", Permissions.TenantView, "admin/tenants"),
             new("Settings", "bi-gear", Permissions.SettingsView),
-            new("License", "bi-key", Permissions.LicenseView),
+            new("License", "bi-key", Permissions.LicenseView, "license"),
+            new("License keys", "bi-patch-check", Permissions.LicenseGenerate, "admin/license-keys"),
         ]),
     ];
 }

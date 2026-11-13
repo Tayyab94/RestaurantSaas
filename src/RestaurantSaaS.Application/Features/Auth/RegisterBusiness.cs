@@ -42,7 +42,8 @@ internal sealed class RegisterBusinessValidator : AbstractValidator<RegisterBusi
     }
 }
 
-internal sealed class RegisterBusinessHandler(IApplicationDbContext db, TenantProvisioner provisioner, IDeploymentInfo deployment)
+//internal sealed class RegisterBusinessHandler(IApplicationDbContext db, TenantProvisioner provisioner, IDeploymentInfo deployment)
+internal sealed class RegisterBusinessHandler(IApplicationDbContext db, TenantProvisioner provisioner, IDeploymentInfo deployment, ILicenseGate licenseGate)
     : IRequestHandler<RegisterBusinessCommand, RegisterBusinessResultDto>
 {
     public async Task<RegisterBusinessResultDto> HandleAsync(RegisterBusinessCommand request, CancellationToken ct)
@@ -53,6 +54,15 @@ internal sealed class RegisterBusinessHandler(IApplicationDbContext db, TenantPr
         {
             throw new RequestRejectedException("already_configured", "This installation is already set up. Please sign in.");
         }
+
+        // ADD at the start of HandleAsync, before "PhoneNumber.TryNormalize(request.Phone, ...)":
+        if (deployment.Mode != DeploymentMode.Cloud
+            && (await licenseGate.RefreshAsync(LicenseCheckTrigger.Startup, ct)).State == Contracts.Dtos.LicenseState.NotActivated)
+        {
+            throw new RequestRejectedException("license_required", "Please activate this installation first (license key or free trial).");
+        }
+
+
 
         PhoneNumber.TryNormalize(request.Phone, out var phone);
         var email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim().ToLowerInvariant();
@@ -78,6 +88,12 @@ internal sealed class RegisterBusinessHandler(IApplicationDbContext db, TenantPr
                 email,
                 phone),
             ct);
+
+        // ADD just before "return new RegisterBusinessResultDto(":
+        if (deployment.Mode != DeploymentMode.Cloud)
+        {
+            await licenseGate.RefreshAsync(LicenseCheckTrigger.Startup, ct);
+        }
 
         return new RegisterBusinessResultDto(result.Tenant.Code, result.Owner.UserName, result.Tenant.TrialEndsAt ?? DateTime.UtcNow);
     }

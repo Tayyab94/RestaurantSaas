@@ -1,0 +1,32 @@
+@implements IDisposable
+@inject LicenseStateService State
+@inject AuthSession Session
+
+@if (State.Current is { } status && status.State is not (LicenseState.Active or LicenseState.NotRequired))
+{
+    <div class="alert alert-@AlertCss(status) d-flex align-items-center gap-2" role="alert">
+        <i class="bi @Icon(status)"></i>
+        <span>@status.Message</span>
+        @if (Session.Has(Permissions.LicenseView))
+        {
+            <a class="btn btn-sm btn-@AlertCss(status) ms-auto" href="license">@(status.State == LicenseState.Trial ? "Enter license key" : "Open license")</a>
+        }
+    </div>
+}
+
+@code {
+    protected override void OnInitialized() => State.Changed += OnChanged;
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => State.Changed -= OnChanged;
+
+    private static string AlertCss(LicenseStatusDto s) => s.Level switch
+    {
+        "warning" => "warning",
+        "danger" => "danger",
+        _ => "info",
+    };
+
+    private static string Icon(LicenseStatusDto s) => s.Level == "danger" ? "bi-exclamation-octagon" : "bi-hourglass-split";
+}

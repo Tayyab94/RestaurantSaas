@@ -1,0 +1,29 @@
+@implements IDisposable
+@inject LicenseStateService State
+@inject NavigationManager Navigation
+
+@* Placed once in MainLayout. While this PC is not activated, every screen sends the user
+   to the activation page. The server stops the requests too (LicenseBehavior);
+   this only makes the screens match. *@
+
+@code {
+    protected override void OnInitialized()
+    {
+        State.Changed += OnChanged;
+        Check();
+    }
+
+    private void OnChanged() => _ = InvokeAsync(Check);
+
+    private void Check()
+    {
+        // Only a desktop or on-premise installation can be "not activated".
+        // A cloud business never gets this state.
+        if (State.Current?.State == LicenseState.NotActivated)
+        {
+            Navigation.NavigateTo("activate", replace: true);
+        }
+    }
+
+    public void Dispose() => State.Changed -= OnChanged;
+}

@@ -1,0 +1,283 @@
+@page "/license"
+@attribute [Authorize(Policy = Permissions.LicenseView)]
+@inject ILicenseService Licenses
+@inject LicenseStateService State
+@inject AuthSession Session
+@inject ISetupService Setup
+@inject NavigationManager Navigation
+
+
+<PageTitle>License | RestoPOS</PageTitle>
+
+<PageHeader Title="License" Subtitle="Your license, how long it lasts, and how to renew it" />
+
+@if (_error is not null && _status is null)
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+else if (_status is null)
+{
+    <div class="text-body-secondary py-5 text-center">Loading...</div>
+}
+else
+{
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header">
+                    <span class="fw-semibold">Current license</span>
+                    <span class="badge ms-auto @BadgeCss(_status)">@_status.State</span>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-@AlertCss(_status)" role="alert">@_status.Message</div>
+
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">Type</dt>
+                        <dd class="col-sm-8">@_status.LicenseType</dd>
+
+                        @if (!string.IsNullOrEmpty(_status.PlanName))
+                        {
+                            <dt class="col-sm-4">Plan</dt>
+                            <dd class="col-sm-8">@_status.PlanName</dd>
+                        }
+
+                        @if (!string.IsNullOrEmpty(_status.LicensedTo))
+                        {
+                            <dt class="col-sm-4">Licensed to</dt>
+                            <dd class="col-sm-8">@_status.LicensedTo</dd>
+                        }
+
+                        @if (!string.IsNullOrEmpty(_status.KeyHint))
+                        {
+                            <dt class="col-sm-4">Key</dt>
+                            <dd class="col-sm-8">XXXXX-XXXXX-XXXXX-XX@(_status.KeyHint)</dd>
+                        }
+
+                        <dt class="col-sm-4">Valid until</dt>
+                        <dd class="col-sm-8">@(_status.ExpiresAtUtc is { } ends ? ends.ToLocalTime().ToString("dd MMM yyyy") : "No end date")</dd>
+
+                        @if (_status.MaxDevices > 0)
+                        {
+                            <dt class="col-sm-4">Limits</dt>
+                            <dd class="col-sm-8">@_status.MaxDevices devices, @_status.MaxBranches branches</dd>
+                        }
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        @if (Session.Has(Permissions.LicenseDeactivate) && _canDeactivate)
+        {
+            <div class="col-12">
+                <div class="card border-danger-subtle">
+                    <div class="card-header"><span class="fw-semibold">Deactivate this PC</span></div>
+                    <div class="card-body">
+                      @*   <p class="text-body-secondary mb-3">
+                            This frees the license key on the License Server and removes the license from this PC.
+                            You can then enter the same key again (here or on another PC). The end date of the key does not change.
+                            An internet connection is needed.
+                        </p> *@
+
+                        <p class="text-body-secondary mb-3">
+                            This frees the license on the License Server and removes it from this PC.
+                            @if (_status.LicenseType == "Trial")
+                            {
+                                <text>A free trial cannot be started again on this PC, phone number or email. Enter a license key afterwards to continue.</text>
+                            }
+                            else
+                            {
+                                <text>You can then enter the same key again (here or on another PC). The end date of the key does not change.</text>
+                            }
+                            An internet connection is needed.
+                        </p>
+
+                        @if (_deactivateError is not null)
+                        {
+                            <div class="alert alert-danger" role="alert">@_deactivateError</div>
+                        }
+
+                      @*   <div class="form-check mb-3">
+                            <input id="confirmDeactivate" class="form-check-input" type="checkbox" @bind="_confirmDeactivate" />
+                            <label class="form-check-label" for="confirmDeactivate">I understand that selling stops on this PC until a key is activated again.</label>
+                        </div>
+                        <button type="button" class="btn btn-outline-danger" disabled="@(_busyDeactivate || !_confirmDeactivate)" @onclick="DeactivateAsync">
+                            @(_busyDeactivate ? "Deactivating..." : "Deactivate this PC")
+                        </button> *@
+
+                        <div class="alert alert-warning" role="alert">
+                            <div class="fw-semibold mb-1"><i class="bi bi-exclamation-triangle me-1"></i>Please read before you continue</div>
+                            <ul class="mb-0">
+                                <li>After deactivation <strong>nobody can use RestoPOS on this PC</strong> until a license key is activated again.</li>
+                                <li>Orders, billing, reports, users and settings are all blocked. Only sign-in and the activation screen work.</li>
+                                <li>You need an internet connection now, and again to activate.</li>
+                                <li>Your data is not deleted. It is available again after activation.</li>
+                            </ul>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="confirmText">Type <strong>DEACTIVATE</strong> to confirm</label>
+                            <input id="confirmText" class="form-control" autocomplete="off" @bind="_confirmText" @bind:event="oninput" />
+                        </div>
+
+                        <button type="button" class="btn btn-outline-danger"
+                                disabled="@(_busyDeactivate || !string.Equals(_confirmText?.Trim(), "DEACTIVATE", StringComparison.OrdinalIgnoreCase))"
+                                @onclick="DeactivateAsync">
+                            @(_busyDeactivate ? "Deactivating..." : "Deactivate this PC")
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (Session.Has(Permissions.LicenseActivate))
+        {
+            <div class="col-lg-5">
+                <div class="card">
+                    @* <div class="card-header"><span class="fw-semibold">Enter a license key</span></div> *@
+
+                    <div class="card-header">
+                        <span class="fw-semibold">@(_status.LicenseType == "Trial" ? "Enter a license key" : "Change license key")</span>
+                    </div>
+                    <form class="card-body" @onsubmit="ActivateAsync" @onsubmit:preventDefault>
+                     @*    <p class="text-body-secondary">Use this to renew, or to leave the free trial.</p> *@
+                        <p class="text-body-secondary">
+                            @(_status.LicenseType == "Trial"
+                                ? "Enter your license key to leave the free trial. The days left of the trial are not added."
+                                : "Enter a different key to replace this license. The old key is freed automatically and can be used on another PC.")
+                        </p>
+
+                        @if (_error is not null)
+                        {
+                            <div class="alert alert-danger" role="alert">
+                                @_error
+                                @foreach (var message in _fieldErrors)
+                                {
+                                    <div>@message</div>
+                                }
+                            </div>
+                        }
+
+                        @if (_done)
+                        {
+                            <div class="alert alert-success" role="alert">The license was activated.</div>
+                        }
+
+                        <div class="mb-3">
+                            <label class="form-label" for="key">License key</label>
+                            <input id="key" class="form-control text-uppercase" placeholder="XXXXX-XXXXX-XXXXX-XXXXX" autocomplete="off" maxlength="40" @bind="_key" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="holder">Name of the license holder</label>
+                            <input id="holder" class="form-control" @bind="_holder" />
+                        </div>
+                        <button type="submit" class="btn btn-primary" disabled="@_busy">@(_busy ? "Activating..." : "Activate")</button>
+                    </form>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private LicenseStatusDto? _status;
+    private string? _error;
+    private List<string> _fieldErrors = [];
+    private string? _key;
+    private string? _holder;
+    private bool _busy;
+    private bool _done;
+
+    private bool _canDeactivate;
+    // private bool _confirmDeactivate;
+    private string? _confirmText;
+    private bool _busyDeactivate;
+    private string? _deactivateError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _holder = Session.User?.TenantName;
+
+        try
+        {
+            _status = await Licenses.GetStatusAsync();
+            State.Set(_status);
+
+            // A cloud license belongs to the business, and a trial cannot be freed:
+            // only a paid key on a desktop or on-premise PC.
+            var setup = await Setup.GetStatusAsync();
+           // _canDeactivate = setup.DeploymentMode != "Cloud"
+             //   && _status.LicenseType != "Trial"
+              //  && _status.State is not (LicenseState.NotActivated or LicenseState.NotRequired);
+
+            // NEW
+            _canDeactivate = setup.DeploymentMode != "Cloud"
+                && _status.State is not (LicenseState.NotActivated or LicenseState.NotRequired);
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task DeactivateAsync()
+{
+    _deactivateError = null;
+    _busyDeactivate = true;
+
+    try
+    {
+        var status = await Licenses.DeactivateAsync();
+        State.Set(status);
+        Navigation.NavigateTo("activate", replace: true);
+    }
+    catch (ServiceException ex)
+    {
+        _deactivateError = ex.Message;
+    }
+    finally
+    {
+        _busyDeactivate = false;
+    }
+}
+
+    private async Task ActivateAsync()
+    {
+        _error = null;
+        _fieldErrors = [];
+        _done = false;
+        _busy = true;
+
+        try
+        {
+            _status = await Licenses.ActivateAsync(new ActivateLicenseRequest(_key ?? string.Empty, _holder ?? string.Empty));
+            State.Set(_status);
+            _key = null;
+            _done = true;
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+            _fieldErrors = ex.Errors.SelectMany(e => e.Value).ToList();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string BadgeCss(LicenseStatusDto s) => s.Level switch
+    {
+        "success" => "text-bg-success",
+        "info" => "text-bg-info",
+        "warning" => "text-bg-warning",
+        _ => "text-bg-danger",
+    };
+
+    private static string AlertCss(LicenseStatusDto s) => s.Level switch
+    {
+        "success" => "success",
+        "warning" => "warning",
+        "danger" => "danger",
+        _ => "info",
+    };
+}

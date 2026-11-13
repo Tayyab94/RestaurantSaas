@@ -80,6 +80,7 @@ try
     builder.Services.AddScoped<ISecureStore, ProtectedLocalStorageSecureStore>();
 
     builder.Services.AddHostedService<DatabaseInitializerService>();
+    builder.Services.AddHostedService<LicenseMaintenanceService>();   // ADD
     builder.Services.AddSignalR();
     builder.Services.AddProblemDetails();
     builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
