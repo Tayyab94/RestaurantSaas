@@ -22,6 +22,7 @@ public static class ApiEndpoints
         secured.MapOnboardingEndpoints();
         secured.MapRoleEndpoints();
         secured.MapLicenseEndpoints();      // ADD
+        secured.MapSettingsEndpoints();
 
         return app;
     }

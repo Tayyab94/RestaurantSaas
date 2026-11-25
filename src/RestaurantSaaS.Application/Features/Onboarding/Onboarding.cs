@@ -19,11 +19,13 @@ public sealed record OnboardingStepDefinition(string Key, string Title, string D
 public static class OnboardingSteps
 {
     public const string UsersKey = "users";
+    public const string BusinessInfoKey = "business-info";
+    public const string BranchKey = "branch";
 
     public static IReadOnlyList<OnboardingStepDefinition> All { get; } =
     [
-        new("business-info", "Business information", "Check your business name, address, currency and tax details.", null),
-        new("branch", "Branch details", "Add the address and opening hours of your branch.", null),
+        new(BusinessInfoKey, "Business information", "Check your business name, address, currency and tax details.", "settings/business", IsAutomatic: true),
+        new(BranchKey, "Branch details", "Add the address and opening hours of your branch.", "settings/branches", IsAutomatic: true),
         new("tables", "Tables and floors", "Draw your floors and add your tables.", null),
         new("menu", "Menu", "Add your categories, items and prices.", null),
         new(UsersKey, "Staff users", "Add your manager, cashiers and waiters.", "admin/users", IsAutomatic: true),

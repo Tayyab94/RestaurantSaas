@@ -41,4 +41,15 @@ public sealed class Branch : TenantEntity
 
         return branch;
     }
+
+    /// <summary>Changes the details of the outlet. The code stays as it was created.</summary>
+    public void Update(string name, string? city, string? address, string? phone)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        Name = name.Trim();
+        City = string.IsNullOrWhiteSpace(city) ? null : city.Trim();
+        Address = string.IsNullOrWhiteSpace(address) ? null : address.Trim();
+        Phone = string.IsNullOrWhiteSpace(phone) ? null : phone.Trim();
+    }
 }

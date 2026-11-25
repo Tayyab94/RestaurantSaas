@@ -21,6 +21,10 @@ public static class LicenseEndpoints
 
         group.MapPost("/trial", async (StartTrialRequest request, IDispatcher dispatcher, CancellationToken ct) =>
             TypedResults.Ok(await dispatcher.SendAsync(new StartTrialCommand(request.UserName, request.Phone, request.Email), ct)));
+        // In MapLicenseOpenEndpoints, ADD after the "/trial" route of `group`:
+        group.MapPost("/deactivate", async (IDispatcher dispatcher, CancellationToken ct) =>
+            TypedResults.Ok(await dispatcher.SendAsync(new DeactivateLicenseCommand(), ct)));
+
 
         var server = app.MapGroup("/api/v1/license-server").WithTags("License Server").AllowAnonymous();
 
@@ -29,6 +33,11 @@ public static class LicenseEndpoints
 
         server.MapPost("/trial", async (ServerTrialRequest request, IDispatcher dispatcher, CancellationToken ct) =>
             TypedResults.Ok(await dispatcher.SendAsync(new ServerTrialCommand(request), ct)));
+
+        // ADD after the "/trial" route of `server`:
+        server.MapPost("/deactivate", async (ServerDeactivateRequest request, IDispatcher dispatcher, CancellationToken ct) =>
+            TypedResults.Ok(await dispatcher.SendAsync(new ServerDeactivateCommand(request), ct)));
+
 
         return app;
     }
@@ -47,14 +56,6 @@ public static class LicenseEndpoints
                 TypedResults.Ok(await dispatcher.SendAsync(new GetPlanOptionsQuery(), ct)))
             .WithTags("License");
 
-
-        // In MapLicenseOpenEndpoints, ADD after the "/trial" route of `group`:
-        group.MapPost("/deactivate", async (IDispatcher dispatcher, CancellationToken ct) =>
-            TypedResults.Ok(await dispatcher.SendAsync(new DeactivateLicenseCommand(), ct)));
-
-        // ADD after the "/trial" route of `server`:
-        server.MapPost("/deactivate", async (ServerDeactivateRequest request, IDispatcher dispatcher, CancellationToken ct) =>
-            TypedResults.Ok(await dispatcher.SendAsync(new ServerDeactivateCommand(request), ct)));
 
         // In MapLicenseEndpoints (secured), ADD before the "/license/plans" route:
         app.MapPost("/license/keys/{id:guid}/reset", async (Guid id, IDispatcher dispatcher, CancellationToken ct) =>

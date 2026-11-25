@@ -1,0 +1,314 @@
+@page "/settings/business"
+@attribute [Authorize(Policy = Permissions.SettingsView)]
+@inject ISettingsService Settings
+@inject AuthSession Session
+
+<PageTitle>Business profile | RestoPOS</PageTitle>
+
+<PageHeader Title="Business profile" Subtitle="Your business name, contact details and logo" />
+
+@if (_message is not null)
+{
+    <div class="alert alert-success" role="alert">@_message</div>
+}
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+
+@if (_loading)
+{
+    <div class="text-body-secondary py-4">Loading...</div>
+}
+else
+{
+    <div class="row g-3">
+        <div class="col-lg-8">
+            <form class="card" @onsubmit="SaveAsync">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">Details</h2>
+
+                    @if (_fieldErrors.Count > 0)
+                    {
+                        <div class="alert alert-danger" role="alert">
+                            <ul class="mb-0">
+                                @foreach (var message in _fieldErrors)
+                                {
+                                    <li>@message</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="b-name">Business name</label>
+                            <input id="b-name" class="form-control" @bind="_name" disabled="@(!CanManage)" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="b-owner">Owner name</label>
+                            <input id="b-owner" class="form-control" @bind="_ownerName" disabled="@(!CanManage)" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="b-phone">Phone</label>
+                            <input id="b-phone" class="form-control" @bind="_phone" disabled="@(!CanManage)" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="b-email">Email</label>
+                            <input id="b-email" type="email" class="form-control" @bind="_email" disabled="@(!CanManage)" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="b-address">Address</label>
+                            <input id="b-address" class="form-control" @bind="_address" disabled="@(!CanManage)" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="b-type">Business type</label>
+                            <select id="b-type" class="form-select" @bind="_businessType" disabled="@(!CanManage)">
+                                @foreach (var type in BusinessTypes)
+                                {
+                                    <option value="@type.Value">@type.Label</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="b-tax">Tax number (NTN or STRN)</label>
+                            <input id="b-tax" class="form-control" @bind="_taxNumber" disabled="@(!CanManage)" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="b-lang">Language</label>
+                            <select id="b-lang" class="form-select" @bind="_language" disabled="@(!CanManage)">
+                                <option value="en">English</option>
+                                <option value="ur">Urdu</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="b-zone">Time zone</label>
+                            <select id="b-zone" class="form-select" @bind="_timeZone" disabled="@(!CanManage)">
+                                @foreach (var zone in TimeZones)
+                                {
+                                    <option value="@zone">@zone</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="b-code">Business code</label>
+                            <input id="b-code" class="form-control" value="@_code" disabled />
+                            <div class="form-text">Staff type this code when they sign in.</div>
+                        </div>
+                    </div>
+                </div>
+                @if (CanManage)
+                {
+                    <div class="card-footer">
+                        <button type="submit" class="btn btn-primary btn-sm" disabled="@_saving">@(_saving ? "Saving..." : "Save")</button>
+                    </div>
+                }
+            </form>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">Logo</h2>
+
+                    @if (!string.IsNullOrEmpty(_logo) && _logo.StartsWith("data:image/", StringComparison.Ordinal))
+                    {
+                        <img src="@_logo" alt="Business logo" class="img-fluid border rounded mb-3" style="max-height: 160px;" />
+                    }
+                    else
+                    {
+                        <div class="text-body-secondary mb-3">No logo yet.</div>
+                    }
+
+                    @if (_logoError is not null)
+                    {
+                        <div class="alert alert-danger py-2" role="alert">@_logoError</div>
+                    }
+
+                    @if (CanManage)
+                    {
+                        <InputFile class="form-control form-control-sm mb-2" accept="image/png,image/jpeg" OnChange="OnLogoSelectedAsync" disabled="@_logoBusy" />
+                        <div class="form-text mb-2">PNG or JPEG, up to 200 KB. It is printed on receipts.</div>
+
+                        @if (!string.IsNullOrEmpty(_logo))
+                        {
+                            <button type="button" class="btn btn-outline-danger btn-sm" disabled="@_logoBusy" @onclick="RemoveLogoAsync">
+                                @(_logoBusy ? "Please wait..." : "Remove logo")
+                            </button>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private const int MaxLogoBytes = 200 * 1024;
+
+    private sealed record Choice(string Value, string Label);
+
+    private static readonly Choice[] BusinessTypes =
+    [
+        new("Restaurant", "Restaurant"),
+        new("Cafe", "Cafe"),
+        new("Bakery", "Bakery"),
+        new("FastFood", "Fast food"),
+        new("Retail", "Retail shop"),
+    ];
+
+    private static readonly string[] TimeZones =
+    [
+        "Asia/Karachi",
+        "Asia/Dubai",
+        "Asia/Riyadh",
+        "Asia/Dhaka",
+        "Asia/Kolkata",
+        "Europe/London",
+        "America/New_York",
+        "UTC",
+    ];
+
+    private bool _loading = true;
+    private bool _saving;
+    private bool _logoBusy;
+    private string? _message;
+    private string? _error;
+    private string? _logoError;
+    private List<string> _fieldErrors = [];
+
+    private string _code = string.Empty;
+    private string _name = string.Empty;
+    private string _ownerName = string.Empty;
+    private string? _phone;
+    private string? _email;
+    private string? _address;
+    private string? _taxNumber;
+    private string _businessType = "Restaurant";
+    private string _timeZone = "Asia/Karachi";
+    private string _language = "en";
+    private string? _logo;
+
+    private bool CanManage => Session.Has(Permissions.SettingsManage);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var profile = await Settings.GetBusinessProfileAsync();
+            _code = profile.Code;
+            _name = profile.Name;
+            _ownerName = profile.OwnerName;
+            _phone = profile.Phone;
+            _email = profile.Email;
+            _address = profile.Address;
+            _taxNumber = profile.TaxNumber;
+            _businessType = profile.BusinessType;
+            _timeZone = profile.TimeZone;
+            _language = profile.DefaultLanguage;
+            _logo = profile.LogoDataUri;
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _message = null;
+        _error = null;
+        _fieldErrors = [];
+        _saving = true;
+
+        try
+        {
+            await Settings.SaveBusinessProfileAsync(new SaveBusinessProfileRequest(
+                _name, _ownerName, _email, _phone, _businessType, _address, _taxNumber, _timeZone, _language));
+
+            _message = "The business profile was saved.";
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+            _fieldErrors = ex.Errors.SelectMany(e => e.Value).ToList();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task OnLogoSelectedAsync(InputFileChangeEventArgs e)
+    {
+        _message = null;
+        _logoError = null;
+        var file = e.File;
+
+        if (file.ContentType is not ("image/png" or "image/jpeg"))
+        {
+            _logoError = "Use a PNG or JPEG picture.";
+            return;
+        }
+
+        if (file.Size > MaxLogoBytes)
+        {
+            _logoError = "The picture is bigger than 200 KB.";
+            return;
+        }
+
+        _logoBusy = true;
+
+        try
+        {
+            using var stream = file.OpenReadStream(MaxLogoBytes);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+
+            var dataUri = $"data:{file.ContentType};base64,{Convert.ToBase64String(buffer.ToArray())}";
+            await Settings.SetLogoAsync(dataUri);
+
+            _logo = dataUri;
+            _message = "The logo was saved.";
+        }
+        catch (ServiceException ex)
+        {
+            _logoError = ex.Message;
+        }
+        catch (IOException)
+        {
+            _logoError = "The picture could not be read. Try again.";
+        }
+        finally
+        {
+            _logoBusy = false;
+        }
+    }
+
+    private async Task RemoveLogoAsync()
+    {
+        _message = null;
+        _logoError = null;
+        _logoBusy = true;
+
+        try
+        {
+            await Settings.SetLogoAsync(null);
+            _logo = null;
+            _message = "The logo was removed.";
+        }
+        catch (ServiceException ex)
+        {
+            _logoError = ex.Message;
+        }
+        finally
+        {
+            _logoBusy = false;
+        }
+    }
+}

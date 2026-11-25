@@ -1,0 +1,225 @@
+@page "/settings/branches"
+@attribute [Authorize(Policy = Permissions.BranchView)]
+@inject ISettingsService Settings
+@inject AuthSession Session
+
+<PageTitle>Branches | RestoPOS</PageTitle>
+
+<PageHeader Title="Branches" Subtitle="Your outlets, with address, phone and opening hours">
+    @if (CanManage)
+    {
+        <button type="button" class="btn btn-primary btn-sm" @onclick="StartNew"><i class="bi bi-plus-lg"></i> New branch</button>
+    }
+</PageHeader>
+
+@if (_message is not null)
+{
+    <div class="alert alert-success" role="alert">@_message</div>
+}
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+
+@if (_editing)
+{
+    <div class="card mb-3">
+        <form class="card-body" @onsubmit="SaveAsync">
+            <h2 class="h5 mb-3">@(_editId is null ? "New branch" : $"Branch: {_code}")</h2>
+
+            @if (_formError is not null)
+            {
+                <div class="alert alert-danger" role="alert">
+                    @_formError
+                    @if (_fieldErrors.Count > 0)
+                    {
+                        <ul class="mb-0 mt-2">
+                            @foreach (var message in _fieldErrors)
+                            {
+                                <li>@message</li>
+                            }
+                        </ul>
+                    }
+                </div>
+            }
+
+            <div class="row g-3 mb-3">
+                <div class="col-md-3">
+                    <label class="form-label" for="br-code">Code</label>
+                    <input id="br-code" class="form-control" @bind="_code" disabled="@(_editId is not null)" />
+                    @if (_editId is null)
+                    {
+                        <div class="form-text">Short, for example DHA. It cannot be changed later.</div>
+                    }
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label" for="br-name">Name</label>
+                    <input id="br-name" class="form-control" @bind="_name" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="br-city">City</label>
+                    <input id="br-city" class="form-control" @bind="_city" />
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label" for="br-address">Address</label>
+                    <input id="br-address" class="form-control" @bind="_address" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="br-phone">Phone</label>
+                    <input id="br-phone" class="form-control" @bind="_phone" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label" for="br-hours">Opening hours</label>
+                    <input id="br-hours" class="form-control" @bind="_openingHours" placeholder="Mon to Sun, 11:00 to 23:00" />
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-sm" disabled="@_saving">@(_saving ? "Saving..." : "Save branch")</button>
+            <button type="button" class="btn btn-link btn-sm" @onclick="Cancel">Close</button>
+        </form>
+    </div>
+}
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 data-table">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Name</th>
+                    <th>City</th>
+                    <th>Phone</th>
+                    <th>Opening hours</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_branches is null)
+                {
+                    <tr><td colspan="6" class="text-center py-5 text-body-secondary">Loading...</td></tr>
+                }
+                else if (_branches.Count == 0)
+                {
+                    <tr><td colspan="6"><EmptyState Icon="bi-diagram-3" Title="No branches" /></td></tr>
+                }
+                else
+                {
+                    @foreach (var branch in _branches)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@branch.Code @(branch.IsMain ? "(main)" : string.Empty)</td>
+                            <td>@branch.Name</td>
+                            <td>@branch.City</td>
+                            <td>@branch.Phone</td>
+                            <td>@branch.OpeningHours</td>
+                            <td class="text-end">
+                                @if (CanManage)
+                                {
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => Edit(branch)">Edit</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private List<BranchDetailDto>? _branches;
+    private bool _editing;
+    private bool _saving;
+    private string? _message;
+    private string? _error;
+    private string? _formError;
+    private List<string> _fieldErrors = [];
+
+    private Guid? _editId;
+    private string _code = string.Empty;
+    private string _name = string.Empty;
+    private string? _city;
+    private string? _address;
+    private string? _phone;
+    private string? _openingHours;
+
+    private bool CanManage => Session.Has(Permissions.BranchManage);
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _branches = (await Settings.GetBranchesAsync()).ToList();
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+            _branches ??= [];
+        }
+    }
+
+    private void StartNew()
+    {
+        Reset();
+        _editing = true;
+    }
+
+    private void Edit(BranchDetailDto branch)
+    {
+        Reset();
+        _editing = true;
+        _editId = branch.Id;
+        _code = branch.Code;
+        _name = branch.Name;
+        _city = branch.City;
+        _address = branch.Address;
+        _phone = branch.Phone;
+        _openingHours = branch.OpeningHours;
+    }
+
+    private void Reset()
+    {
+        _message = null;
+        _error = null;
+        _formError = null;
+        _fieldErrors = [];
+        _editId = null;
+        _code = string.Empty;
+        _name = string.Empty;
+        _city = null;
+        _address = null;
+        _phone = null;
+        _openingHours = null;
+    }
+
+    private void Cancel() => _editing = false;
+
+    private async Task SaveAsync()
+    {
+        _formError = null;
+        _fieldErrors = [];
+        _saving = true;
+
+        try
+        {
+            var isNew = _editId is null;
+            await Settings.SaveBranchAsync(new SaveBranchRequest(_editId, _code, _name, _city, _address, _phone, _openingHours));
+
+            _message = isNew ? "The branch was added." : "The branch was saved.";
+            _editing = false;
+            await LoadAsync();
+        }
+        catch (ServiceException ex)
+        {
+            _formError = ex.Message;
+            _fieldErrors = ex.Errors.SelectMany(e => e.Value).ToList();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}
