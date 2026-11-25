@@ -8,6 +8,7 @@ using RestaurantSaaS.Application.Messaging;
 using RestaurantSaaS.Application.Services;
 using RestaurantSaaS.Contracts.Services;
 using RestaurantSaaS.Application.Features.Licensing;
+using RestaurantSaaS.Application.Features.Settings;
 
 namespace RestaurantSaaS.Application;
 
@@ -23,6 +24,8 @@ public static class DependencyInjection
         services.AddScoped<UserSessionBuilder>();
         services.AddScoped<SignInService>();
         services.AddScoped<AuditTrail>();
+        services.AddScoped<SettingStore>();
+        services.AddScoped<NumberSequenceService>();
         services.TryAddScoped<IRequestInfo, NullRequestInfo>();
         services.AddScoped<TenantProvisioner>();
         services.AddSingleton<LicenseStateCache>();
@@ -70,6 +73,7 @@ public static class DependencyInjection
         services.AddScoped<IApprovalService, LocalApprovalService>();
         services.AddScoped<IAuditService, LocalAuditService>();
         services.AddScoped<ILicenseService, LocalLicenseService>();
+        services.AddScoped<ISettingsService, LocalSettingsService>();
         return services;
     }
 }

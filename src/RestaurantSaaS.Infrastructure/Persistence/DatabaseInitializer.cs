@@ -37,6 +37,7 @@ public static class DatabaseInitializer
 
         // ADD after DatabaseSeeder.EnsureOwnerPermissionsAsync(db, ct);
         await DatabaseSeeder.EnsureDefaultPlanAsync(db, ct);
+        await ModuleCatalogSeeder.EnsureAsync(db, ct);
 
         // ADD after the "if (seed.DemoData) { ... }" block:
         if (provider.GetRequiredService<IDeploymentInfo>().Mode != DeploymentMode.Cloud)

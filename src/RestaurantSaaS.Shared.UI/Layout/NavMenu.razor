@@ -1,10 +1,11 @@
 @implements IDisposable
 @inject AuthSession Session
+@inject ModuleState Modules
 
 <nav class="nav-menu" aria-label="Sections">
     @foreach (var section in Sections)
     {
-        var items = section.Items.Where(i => i.Permission is null || Session.Has(i.Permission)).ToList();
+        var items = section.Items.Where(i => (i.Permission is null || Session.Has(i.Permission)) && (i.Feature is null || Modules.IsEnabled(i.Feature))).ToList();
 
         @if (items.Count > 0)
         {
@@ -44,13 +45,37 @@
     [Parameter]
     public EventCallback OnNavigate { get; set; }
 
-    protected override void OnInitialized() => Session.Changed += OnSessionChanged;
+    protected override async Task OnInitializedAsync()
+    {
+        Session.Changed += OnSessionChanged;
+        Modules.Changed += OnModulesChanged;
 
-    private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
+        if (Session.IsAuthenticated)
+        {
+            await Modules.RefreshAsync();
+        }
+    }
 
-    public void Dispose() => Session.Changed -= OnSessionChanged;
+    private void OnSessionChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
 
-    private sealed record NavItem(string Text, string Icon, string? Permission = null, string? Href = null, NavLinkMatch Match = NavLinkMatch.Prefix);
+        // A new sign-in can be another business, so its switches are loaded again.
+        if (Session.IsAuthenticated)
+        {
+            _ = Modules.RefreshAsync();
+        }
+    }
+
+    private void OnModulesChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Session.Changed -= OnSessionChanged;
+        Modules.Changed -= OnModulesChanged;
+    }
+
+    private sealed record NavItem(string Text, string Icon, string? Permission = null, string? Href = null, NavLinkMatch Match = NavLinkMatch.Prefix, string? Feature = null);
 
     private sealed record NavSection(string Title, NavItem[] Items);
 
@@ -65,15 +90,15 @@
         [
             new("Orders", "bi-receipt", Permissions.OrderView),
             new("Tables", "bi-grid-3x3-gap", Permissions.TableView),
-            new("Kitchen", "bi-fire", Permissions.OrderView),
-            new("Delivery", "bi-bicycle", Permissions.OrderView),
+            new("Kitchen", "bi-fire", Permissions.OrderView, Feature: "module.kitchen-display"),
+            new("Delivery", "bi-bicycle", Permissions.OrderView, Feature: "module.delivery"),
         ]),
         new("Management",
         [
             new("Menu", "bi-book", Permissions.MenuView),
             new("Customers", "bi-people", Permissions.OrderView),
-            new("Inventory", "bi-box-seam", Permissions.MenuManage),
-            new("Suppliers", "bi-truck", Permissions.MenuManage),
+            new("Inventory", "bi-box-seam", Permissions.MenuManage, Feature: "module.inventory"),
+            new("Suppliers", "bi-truck", Permissions.MenuManage, Feature: "module.inventory"),
             new("Reports", "bi-bar-chart-line", Permissions.ReportView),
         ]),
         new("Administration",
@@ -83,7 +108,13 @@
             new("Roles", "bi-shield-check", Permissions.RoleView, "admin/roles"),
             new("Audit log", "bi-journal-text", Permissions.AuditLogView, "admin/audit-log"),
             new("Tenants", "bi-buildings", Permissions.TenantView, "admin/tenants"),
-            new("Settings", "bi-gear", Permissions.SettingsView),
+            new("Business profile", "bi-shop", Permissions.SettingsView, "settings/business"),
+            new("Branches", "bi-diagram-3", Permissions.BranchView, "settings/branches"),
+            new("Tax and billing", "bi-percent", Permissions.SettingsView, "settings/tax"),
+            new("Payment methods", "bi-credit-card", Permissions.SettingsView, "settings/payment-methods"),
+            new("Receipt design", "bi-printer", Permissions.SettingsView, "settings/receipt"),
+            new("Numbering", "bi-123", Permissions.SettingsView, "settings/numbering"),
+            new("Modules", "bi-toggles", Permissions.SettingsView, "settings/modules"),
             new("License", "bi-key", Permissions.LicenseView, "license"),
             new("License keys", "bi-patch-check", Permissions.LicenseGenerate, "admin/license-keys"),
         ]),

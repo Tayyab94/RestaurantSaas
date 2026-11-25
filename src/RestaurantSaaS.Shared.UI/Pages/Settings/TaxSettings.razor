@@ -1,0 +1,445 @@
+@page "/settings/tax"
+@attribute [Authorize(Policy = Permissions.SettingsView)]
+@inject ISettingsService Settings
+@inject AuthSession Session
+
+<PageTitle>Tax and billing | RestoPOS</PageTitle>
+
+<PageHeader Title="Tax and billing" Subtitle="Currency, tax rates, service charge and rounding" />
+
+@if (_message is not null)
+{
+    <div class="alert alert-success" role="alert">@_message</div>
+}
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+
+@if (_loading)
+{
+    <div class="text-body-secondary py-4">Loading...</div>
+}
+else
+{
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <form class="card h-100" @onsubmit="SaveBillingAsync">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">Currency, service charge and rounding</h2>
+
+                    @if (_billingErrors.Count > 0)
+                    {
+                        <div class="alert alert-danger" role="alert">
+                            <ul class="mb-0">
+                                @foreach (var message in _billingErrors)
+                                {
+                                    <li>@message</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label" for="t-currency">Currency</label>
+                        <select id="t-currency" class="form-select" @bind="_currency" disabled="@(!CanManage)">
+                            @foreach (var currency in _currencies)
+                            {
+                                <option value="@currency.Code">@currency.Code, @currency.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="form-check mb-2">
+                        <input id="t-sc-on" class="form-check-input" type="checkbox" @bind="_serviceEnabled" disabled="@(!CanManage)" />
+                        <label class="form-check-label" for="t-sc-on">Add a service charge to bills</label>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="t-sc">Service charge (%)</label>
+                        <input id="t-sc" type="number" min="0" max="100" step="0.5" class="form-control" @bind="_servicePercent" disabled="@(!CanManage || !_serviceEnabled)" />
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="form-label" for="t-rmode">Rounding</label>
+                            <select id="t-rmode" class="form-select" @bind="_roundingMode" disabled="@(!CanManage)">
+                                <option value="None">No rounding</option>
+                                <option value="Nearest">To the nearest</option>
+                                <option value="Up">Always up</option>
+                                <option value="Down">Always down</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label" for="t-rstep">Round to a multiple of</label>
+                            <select id="t-rstep" class="form-select" @bind="_roundingStep" disabled="@(!CanManage || _roundingMode == "None")">
+                                <option value="1">1</option>
+                                <option value="5">5</option>
+                                <option value="10">10</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                @if (CanManage)
+                {
+                    <div class="card-footer">
+                        <button type="submit" class="btn btn-primary btn-sm" disabled="@_savingBilling">@(_savingBilling ? "Saving..." : "Save")</button>
+                    </div>
+                }
+            </form>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">Test bill</h2>
+                    <div class="form-text mb-2">Shows how a bill is worked out from the saved settings. Save your changes first.</div>
+
+                    <div class="input-group mb-3">
+                        <span class="input-group-text">Items total</span>
+                        <input type="number" min="1" step="1" class="form-control" @bind="_previewSubtotal" aria-label="Items total" />
+                        <button type="button" class="btn btn-outline-primary" disabled="@_previewing" @onclick="PreviewAsync">
+                            @(_previewing ? "Working..." : "Calculate")
+                        </button>
+                    </div>
+
+                    @if (_previewError is not null)
+                    {
+                        <div class="alert alert-danger py-2" role="alert">@_previewError</div>
+                    }
+
+                    @if (_bill is not null)
+                    {
+                        <table class="table table-sm mb-0">
+                            <tbody>
+                                @foreach (var line in _bill.Lines)
+                                {
+                                    <tr class="@(line.IsTotal ? "fw-bold" : string.Empty)">
+                                        <td>@line.Label</td>
+                                        <td class="text-end">@_bill.CurrencyCode @line.Amount.ToString("N2")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12">
+            @if (_editing)
+            {
+                <div class="card mb-3">
+                    <form class="card-body" @onsubmit="SaveTaxAsync">
+                        <h2 class="h5 mb-3">@(_taxId is null ? "New tax rate" : "Edit tax rate")</h2>
+
+                        @if (_taxError is not null)
+                        {
+                            <div class="alert alert-danger" role="alert">
+                                @_taxError
+                                @if (_taxFieldErrors.Count > 0)
+                                {
+                                    <ul class="mb-0 mt-2">
+                                        @foreach (var message in _taxFieldErrors)
+                                        {
+                                            <li>@message</li>
+                                        }
+                                    </ul>
+                                }
+                            </div>
+                        }
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label" for="x-name">Name</label>
+                                <input id="x-name" class="form-control" @bind="_taxName" placeholder="GST" />
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label" for="x-type">Type</label>
+                                <select id="x-type" class="form-select" @bind="_taxType">
+                                    <option value="Percent">Percent</option>
+                                    <option value="Fixed">Fixed amount</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label" for="x-rate">@(_taxType == "Percent" ? "Rate (%)" : "Amount")</label>
+                                <input id="x-rate" type="number" min="0" step="0.01" class="form-control" @bind="_taxRate" />
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label" for="x-applies">Applies to</label>
+                                <select id="x-applies" class="form-select" @bind="_taxAppliesTo">
+                                    <option value="All">All</option>
+                                    <option value="Food">Food</option>
+                                    <option value="Service">Service</option>
+                                    <option value="Retail">Retail</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label" for="x-fbr">FBR code</label>
+                                <input id="x-fbr" class="form-control" @bind="_taxFbrCode" />
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check">
+                                    <input id="x-incl" class="form-check-input" type="checkbox" @bind="_taxInclusive" />
+                                    <label class="form-check-label" for="x-incl">Already included in item prices</label>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check">
+                                    <input id="x-def" class="form-check-input" type="checkbox" @bind="_taxDefault" />
+                                    <label class="form-check-label" for="x-def">Add to every new bill</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-sm" disabled="@_savingTax">@(_savingTax ? "Saving..." : "Save tax rate")</button>
+                        <button type="button" class="btn btn-link btn-sm" @onclick="CancelTax">Close</button>
+                    </form>
+                </div>
+            }
+
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span class="fw-semibold">Tax rates</span>
+                    @if (CanManage)
+                    {
+                        <button type="button" class="btn btn-primary btn-sm" @onclick="StartNewTax"><i class="bi bi-plus-lg"></i> New tax rate</button>
+                    }
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 data-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th class="text-end">Rate</th>
+                                <th>Applies to</th>
+                                <th>Included in prices</th>
+                                <th>On every bill</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_taxes.Count == 0)
+                            {
+                                <tr><td colspan="6"><EmptyState Icon="bi-percent" Title="No tax rates" Message="Add a tax rate if your bills carry tax." /></td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var tax in _taxes)
+                                {
+                                    <tr>
+                                        <td class="fw-semibold">@tax.Name</td>
+                                        <td class="text-end">@(tax.TaxType == "Percent" ? $"{tax.Rate:0.##}%" : tax.Rate.ToString("N2"))</td>
+                                        <td>@tax.AppliesTo</td>
+                                        <td>@(tax.IsInclusive ? "Yes" : "No")</td>
+                                        <td>@(tax.IsDefault ? "Yes" : "No")</td>
+                                        <td class="text-end">
+                                            @if (CanManage)
+                                            {
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => EditTax(tax)">Edit</button>
+                                                <button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => DeleteTaxAsync(tax)">Delete</button>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _loading = true;
+    private string? _message;
+    private string? _error;
+
+    private IReadOnlyList<CurrencyDto> _currencies = [];
+    private string _currency = "PKR";
+    private bool _serviceEnabled;
+    private decimal _servicePercent;
+    private string _roundingMode = "None";
+    private int _roundingStep = 1;
+    private bool _savingBilling;
+    private List<string> _billingErrors = [];
+
+    private List<TaxRateDto> _taxes = [];
+    private bool _editing;
+    private bool _savingTax;
+    private string? _taxError;
+    private List<string> _taxFieldErrors = [];
+    private Guid? _taxId;
+    private string _taxName = string.Empty;
+    private string _taxType = "Percent";
+    private decimal _taxRate;
+    private string _taxAppliesTo = "All";
+    private bool _taxInclusive;
+    private bool _taxDefault = true;
+    private string? _taxFbrCode;
+
+    private decimal _previewSubtotal = 1000;
+    private bool _previewing;
+    private string? _previewError;
+    private TestBillDto? _bill;
+
+    private bool CanManage => Session.Has(Permissions.SettingsManage);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _currencies = await Settings.GetCurrenciesAsync();
+            await LoadBillingAsync();
+            await LoadTaxesAsync();
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadBillingAsync()
+    {
+        var billing = await Settings.GetBillingSettingsAsync();
+        _currency = billing.CurrencyCode;
+        _serviceEnabled = billing.ServiceChargeEnabled;
+        _servicePercent = billing.ServiceChargePercent;
+        _roundingMode = billing.RoundingMode;
+        _roundingStep = billing.RoundingStep;
+    }
+
+    private async Task LoadTaxesAsync() => _taxes = (await Settings.GetTaxRatesAsync()).ToList();
+
+    private async Task SaveBillingAsync()
+    {
+        _message = null;
+        _error = null;
+        _billingErrors = [];
+        _savingBilling = true;
+
+        try
+        {
+            await Settings.SaveBillingSettingsAsync(new BillingSettingsDto(
+                _currency, _serviceEnabled, _serviceEnabled ? _servicePercent : 0m, _roundingMode, _roundingStep));
+
+            _message = "The billing settings were saved.";
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+            _billingErrors = ex.Errors.SelectMany(e => e.Value).ToList();
+        }
+        finally
+        {
+            _savingBilling = false;
+        }
+    }
+
+    private async Task PreviewAsync()
+    {
+        _previewError = null;
+        _previewing = true;
+
+        try
+        {
+            _bill = await Settings.PreviewBillAsync(_previewSubtotal);
+        }
+        catch (ServiceException ex)
+        {
+            _previewError = ex.Errors.Count > 0 ? string.Join(" ", ex.Errors.SelectMany(e => e.Value)) : ex.Message;
+        }
+        finally
+        {
+            _previewing = false;
+        }
+    }
+
+    private void StartNewTax()
+    {
+        ResetTax();
+        _editing = true;
+    }
+
+    private void EditTax(TaxRateDto tax)
+    {
+        ResetTax();
+        _editing = true;
+        _taxId = tax.Id;
+        _taxName = tax.Name;
+        _taxType = tax.TaxType;
+        _taxRate = tax.Rate;
+        _taxAppliesTo = tax.AppliesTo;
+        _taxInclusive = tax.IsInclusive;
+        _taxDefault = tax.IsDefault;
+        _taxFbrCode = tax.FbrTaxCode;
+    }
+
+    private void ResetTax()
+    {
+        _message = null;
+        _error = null;
+        _taxError = null;
+        _taxFieldErrors = [];
+        _taxId = null;
+        _taxName = string.Empty;
+        _taxType = "Percent";
+        _taxRate = 0;
+        _taxAppliesTo = "All";
+        _taxInclusive = false;
+        _taxDefault = true;
+        _taxFbrCode = null;
+    }
+
+    private void CancelTax() => _editing = false;
+
+    private async Task SaveTaxAsync()
+    {
+        _taxError = null;
+        _taxFieldErrors = [];
+        _savingTax = true;
+
+        try
+        {
+            var isNew = _taxId is null;
+
+            await Settings.SaveTaxRateAsync(new SaveTaxRateRequest(
+                _taxId, _taxName, _taxRate, _taxType, _taxAppliesTo, _taxInclusive, _taxDefault, _taxFbrCode));
+
+            _message = isNew ? "The tax rate was added." : "The tax rate was saved.";
+            _editing = false;
+            await LoadTaxesAsync();
+        }
+        catch (ServiceException ex)
+        {
+            _taxError = ex.Message;
+            _taxFieldErrors = ex.Errors.SelectMany(e => e.Value).ToList();
+        }
+        finally
+        {
+            _savingTax = false;
+        }
+    }
+
+    private async Task DeleteTaxAsync(TaxRateDto tax)
+    {
+        _message = null;
+        _error = null;
+
+        try
+        {
+            await Settings.DeleteTaxRateAsync(tax.Id);
+            _message = $"The tax rate {tax.Name} was deleted.";
+            await LoadTaxesAsync();
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+}

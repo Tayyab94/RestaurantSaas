@@ -1,0 +1,257 @@
+@page "/settings/payment-methods"
+@attribute [Authorize(Policy = Permissions.SettingsView)]
+@inject ISettingsService Settings
+@inject AuthSession Session
+
+<PageTitle>Payment methods | RestoPOS</PageTitle>
+
+<PageHeader Title="Payment methods" Subtitle="How your customers can pay">
+    @if (CanManage)
+    {
+        <button type="button" class="btn btn-primary btn-sm" @onclick="StartNew"><i class="bi bi-plus-lg"></i> New payment method</button>
+    }
+</PageHeader>
+
+@if (_message is not null)
+{
+    <div class="alert alert-success" role="alert">@_message</div>
+}
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+
+@if (_editing)
+{
+    <div class="card mb-3">
+        <form class="card-body" @onsubmit="SaveAsync">
+            <h2 class="h5 mb-3">@(_editId is null ? "New payment method" : "Edit payment method")</h2>
+
+            @if (_formError is not null)
+            {
+                <div class="alert alert-danger" role="alert">
+                    @_formError
+                    @if (_fieldErrors.Count > 0)
+                    {
+                        <ul class="mb-0 mt-2">
+                            @foreach (var message in _fieldErrors)
+                            {
+                                <li>@message</li>
+                            }
+                        </ul>
+                    }
+                </div>
+            }
+
+            <div class="row g-3 mb-3">
+                <div class="col-md-5">
+                    <label class="form-label" for="pm-name">Name</label>
+                    <input id="pm-name" class="form-control" @bind="_name" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="pm-type">Type</label>
+                    <select id="pm-type" class="form-select" @bind="_type">
+                        <option value="Cash">Cash</option>
+                        <option value="Card">Card</option>
+                        <option value="Online">Online</option>
+                        <option value="Wallet">Mobile wallet</option>
+                        <option value="Credit">Credit (pay later)</option>
+                        <option value="GiftCard">Gift card</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="pm-sort">Order in the list</label>
+                    <input id="pm-sort" type="number" min="0" max="1000" class="form-control" @bind="_sortOrder" />
+                </div>
+                <div class="col-md-4">
+                    <div class="form-check">
+                        <input id="pm-drawer" class="form-check-input" type="checkbox" @bind="_opensDrawer" />
+                        <label class="form-check-label" for="pm-drawer">Opens the cash drawer</label>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-check">
+                        <input id="pm-ref" class="form-check-input" type="checkbox" @bind="_requiresReference" />
+                        <label class="form-check-label" for="pm-ref">Cashier must enter a reference</label>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-check">
+                        <input id="pm-active" class="form-check-input" type="checkbox" @bind="_isActive" />
+                        <label class="form-check-label" for="pm-active">In use</label>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-sm" disabled="@_saving">@(_saving ? "Saving..." : "Save")</button>
+            <button type="button" class="btn btn-link btn-sm" @onclick="Cancel">Close</button>
+        </form>
+    </div>
+}
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 data-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Opens drawer</th>
+                    <th>Reference</th>
+                    <th>Status</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_methods is null)
+                {
+                    <tr><td colspan="6" class="text-center py-5 text-body-secondary">Loading...</td></tr>
+                }
+                else if (_methods.Count == 0)
+                {
+                    <tr><td colspan="6"><EmptyState Icon="bi-credit-card" Title="No payment methods" /></td></tr>
+                }
+                else
+                {
+                    @foreach (var method in _methods)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@method.Name</td>
+                            <td>@method.MethodType</td>
+                            <td>@(method.OpensDrawer ? "Yes" : "No")</td>
+                            <td>@(method.RequiresReference ? "Required" : "No")</td>
+                            <td>@(method.IsActive ? "In use" : "Off")</td>
+                            <td class="text-end">
+                                @if (CanManage)
+                                {
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => Edit(method)">Edit</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => ToggleAsync(method)">
+                                        @(method.IsActive ? "Turn off" : "Turn on")
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private List<PaymentMethodDto>? _methods;
+    private bool _editing;
+    private bool _saving;
+    private string? _message;
+    private string? _error;
+    private string? _formError;
+    private List<string> _fieldErrors = [];
+
+    private Guid? _editId;
+    private string _name = string.Empty;
+    private string _type = "Cash";
+    private bool _opensDrawer;
+    private bool _requiresReference;
+    private bool _isActive = true;
+    private int _sortOrder;
+
+    private bool CanManage => Session.Has(Permissions.SettingsManage);
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _methods = (await Settings.GetPaymentMethodsAsync()).ToList();
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+            _methods ??= [];
+        }
+    }
+
+    private void StartNew()
+    {
+        Reset();
+        _editing = true;
+    }
+
+    private void Edit(PaymentMethodDto method)
+    {
+        Reset();
+        _editing = true;
+        _editId = method.Id;
+        _name = method.Name;
+        _type = method.MethodType;
+        _opensDrawer = method.OpensDrawer;
+        _requiresReference = method.RequiresReference;
+        _isActive = method.IsActive;
+        _sortOrder = method.SortOrder;
+    }
+
+    private void Reset()
+    {
+        _message = null;
+        _error = null;
+        _formError = null;
+        _fieldErrors = [];
+        _editId = null;
+        _name = string.Empty;
+        _type = "Cash";
+        _opensDrawer = false;
+        _requiresReference = false;
+        _isActive = true;
+        _sortOrder = 0;
+    }
+
+    private void Cancel() => _editing = false;
+
+    private async Task SaveAsync()
+    {
+        _formError = null;
+        _fieldErrors = [];
+        _saving = true;
+
+        try
+        {
+            var isNew = _editId is null;
+
+            await Settings.SavePaymentMethodAsync(new SavePaymentMethodRequest(
+                _editId, _name, _type, _opensDrawer, _requiresReference, _isActive, _sortOrder));
+
+            _message = isNew ? "The payment method was added." : "The payment method was saved.";
+            _editing = false;
+            await LoadAsync();
+        }
+        catch (ServiceException ex)
+        {
+            _formError = ex.Message;
+            _fieldErrors = ex.Errors.SelectMany(e => e.Value).ToList();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ToggleAsync(PaymentMethodDto method)
+    {
+        _message = null;
+        _error = null;
+
+        try
+        {
+            await Settings.SavePaymentMethodAsync(new SavePaymentMethodRequest(
+                method.Id, method.Name, method.MethodType, method.OpensDrawer, method.RequiresReference, !method.IsActive, method.SortOrder));
+
+            await LoadAsync();
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+}

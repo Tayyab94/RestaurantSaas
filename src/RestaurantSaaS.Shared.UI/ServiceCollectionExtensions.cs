@@ -19,6 +19,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<ThemeService>();
         services.AddScoped<LicenseStateService>();
+        services.AddScoped<ModuleState>();
 
         services.TryAddSingleton<AuthSessionOptions>();
         services.AddScoped<AuthSession>();
@@ -57,6 +58,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IApprovalService, RemoteApprovalService>();
         services.AddScoped<IAuditService, RemoteAuditService>();
         services.AddScoped<ILicenseService, RemoteLicenseService>();
+        services.AddScoped<ISettingsService, RemoteSettingsService>();
 
         return services;
     }

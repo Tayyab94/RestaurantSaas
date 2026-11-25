@@ -1,0 +1,199 @@
+@page "/settings/numbering"
+@attribute [Authorize(Policy = Permissions.SettingsView)]
+@inject ISettingsService Settings
+@inject AuthSession Session
+
+<PageTitle>Document numbers | RestoPOS</PageTitle>
+
+<PageHeader Title="Document numbers" Subtitle="The prefix, length and reset rule of order, invoice and other numbers, for each branch" />
+
+@if (_message is not null)
+{
+    <div class="alert alert-success" role="alert">@_message</div>
+}
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+
+@if (_fieldErrors.Count > 0)
+{
+    <div class="alert alert-danger" role="alert">
+        <ul class="mb-0">
+            @foreach (var message in _fieldErrors)
+            {
+                <li>@message</li>
+            }
+        </ul>
+    </div>
+}
+
+<div class="card mb-3">
+    <div class="card-body">
+        <label class="form-label" for="n-branch">Branch</label>
+        <select id="n-branch" class="form-select" style="max-width: 320px;" value="@_branchId" @onchange="OnBranchChangedAsync">
+            @foreach (var branch in _branches)
+            {
+                <option value="@branch.Id">@branch.Name (@branch.Code)</option>
+            }
+        </select>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table align-middle mb-0 data-table">
+            <thead>
+                <tr>
+                    <th>Document</th>
+                    <th>Prefix</th>
+                    <th>Suffix</th>
+                    <th>Digits</th>
+                    <th>Starts again</th>
+                    <th>Last used</th>
+                    <th>Next number</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_rows.Count == 0)
+                {
+                    <tr><td colspan="7" class="text-center py-5 text-body-secondary">@(_loading ? "Loading..." : "No branch selected.")</td></tr>
+                }
+                else
+                {
+                    @foreach (var row in _rows)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@row.Label</td>
+                            <td><input class="form-control form-control-sm" style="width: 110px;" @bind="row.Prefix" disabled="@(!CanManage)" aria-label="@($"{row.Label} prefix")" /></td>
+                            <td><input class="form-control form-control-sm" style="width: 110px;" @bind="row.Suffix" disabled="@(!CanManage)" aria-label="@($"{row.Label} suffix")" /></td>
+                            <td><input type="number" min="1" max="12" class="form-control form-control-sm" style="width: 80px;" @bind="row.Padding" disabled="@(!CanManage)" aria-label="@($"{row.Label} digits")" /></td>
+                            <td>
+                                <select class="form-select form-select-sm" style="width: 130px;" @bind="row.ResetPolicy" disabled="@(!CanManage)" aria-label="@($"{row.Label} reset rule")">
+                                    <option value="Never">Never</option>
+                                    <option value="Daily">Every day</option>
+                                    <option value="Monthly">Every month</option>
+                                    <option value="Yearly">Every year</option>
+                                </select>
+                            </td>
+                            <td>@(row.CurrentValue == 0 ? "None yet" : row.CurrentValue.ToString())</td>
+                            <td class="text-body-secondary">@row.NextPreview</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (CanManage && _rows.Count > 0)
+    {
+        <div class="card-footer">
+            <button type="button" class="btn btn-primary btn-sm" disabled="@_saving" @onclick="SaveAsync">@(_saving ? "Saving..." : "Save")</button>
+            <span class="form-text ms-2">The next number shown is worked out from the saved rule. A new prefix keeps counting from the last number.</span>
+        </div>
+    }
+</div>
+
+@code {
+    private sealed class Row(NumberSequenceDto source)
+    {
+        public string DocumentType { get; } = source.DocumentType;
+
+        public string Label { get; } = source.Label;
+
+        public string Prefix { get; set; } = source.Prefix;
+
+        public string? Suffix { get; set; } = source.Suffix;
+
+        public int Padding { get; set; } = source.Padding;
+
+        public string ResetPolicy { get; set; } = source.ResetPolicy;
+
+        public long CurrentValue { get; } = source.CurrentValue;
+
+        public string NextPreview { get; set; } = source.NextNumber;
+    }
+
+    private IReadOnlyList<BranchDetailDto> _branches = [];
+    private List<Row> _rows = [];
+    private Guid _branchId;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _message;
+    private string? _error;
+    private List<string> _fieldErrors = [];
+
+    private bool CanManage => Session.Has(Permissions.SettingsManage);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _branches = await Settings.GetBranchesAsync();
+
+            if (_branches.Count > 0)
+            {
+                _branchId = (_branches.FirstOrDefault(b => b.IsMain) ?? _branches[0]).Id;
+                await LoadRowsAsync();
+            }
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadRowsAsync() =>
+        _rows = (await Settings.GetNumberSequencesAsync(_branchId)).Select(n => new Row(n)).ToList();
+
+    private async Task OnBranchChangedAsync(ChangeEventArgs e)
+    {
+        _message = null;
+        _error = null;
+        _fieldErrors = [];
+
+        if (Guid.TryParse(e.Value?.ToString(), out var id))
+        {
+            _branchId = id;
+
+            try
+            {
+                await LoadRowsAsync();
+            }
+            catch (ServiceException ex)
+            {
+                _error = ex.Message;
+            }
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _message = null;
+        _error = null;
+        _fieldErrors = [];
+        _saving = true;
+
+        try
+        {
+            await Settings.SaveNumberSequencesAsync(_branchId, new SaveNumberSequencesRequest(
+                _rows.Select(r => new NumberSequenceInputDto(r.DocumentType, r.Prefix ?? string.Empty, r.Suffix, r.Padding, r.ResetPolicy)).ToList()));
+
+            await LoadRowsAsync();
+            _message = "The document numbers were saved.";
+        }
+        catch (ServiceException ex)
+        {
+            _error = ex.Message;
+            _fieldErrors = ex.Errors.SelectMany(e => e.Value).ToList();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

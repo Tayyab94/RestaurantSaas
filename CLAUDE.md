@@ -132,6 +132,7 @@ Passwords and PINs only as PBKDF2 hashes (`IPasswordHasher`). Every sign-in fail
 | Database Schema Design | All 236 tables |
 | Technical Architecture | Decisions (ADR), flows |
 | `docs/M04-Licensing.md` | How licensing works, settings, and manual checks |
+| `docs/M05-Business-Settings.md` | How business settings work, where data is stored, assumptions, and manual checks |
 | UI/UX Specification, Test Plan, Deployment Guide, Project Plan | As named |
 
 Links are in `docs/DOCUMENTS.md`. Where a later section of a document says it replaces an earlier one, the later section wins.
@@ -150,6 +151,26 @@ Read `docs/M04-Licensing.md` before touching anything license related.
 - **Permissions:** `License.View`, `License.Activate`, `License.Deactivate`, `License.Generate` (platform only).
 - **Not yet done (by plan):** offline activation, transfer, revoke screen, reminders, OS-protected secret, repair after restore (M17, M37); plans and feature switches (M34); SuperAdmin portal (M35).
 
-## 12. Where we are
+## 12. Business Settings (M05) in short
 
-Modules M00 to M04 are written (**not yet built and tested**). The M04 patch has to be built first; fix build errors in small steps, then run the manual checks in `docs/M04-Licensing.md`. **Next module: M05 Business Settings** (FR-M05-01 to FR-M05-07), then M06 Menu, M07 Tables, M08 Customers to finish Sprint S3. See the Module Status Report for the full list.
+Read `docs/M05-Business-Settings.md` before touching settings, tax, numbering or module switches. **No schema change was needed for M05; there is no M05 migration.**
+
+- **Screens** (`Shared.UI/Pages/Settings`): business profile and logo, branches, tax and billing (with a test bill), payment methods, receipt design, document numbers, modules. Menu entries are under Administration.
+- **Service:** one `ISettingsService` (Contracts), `LocalSettingsService` (Application/Services), `RemoteSettingsService` (Shared.UI), endpoints in `SettingsEndpoints` (`/api/v1/settings/...`). Use cases are in `Application/Features/Settings`.
+- **Storage:** profile fields in `Tenant`; address, tax number, logo, branch opening hours, service charge and rounding in the `Setting` table (`SettingStore`, keys in `SettingKeys`); currencies are a fixed list in code (`CurrencyCatalog`); module catalog and business-type templates are in `ModuleCatalog` and are written to `Feature`, `BusinessTypeTemplate`, `TemplateFeature` at start-up by `ModuleCatalogSeeder`.
+- **Reuse, do not rebuild:**
+  - `BillCalculator` (service charge, tax, rounding): M11 Billing must use it.
+  - `NumberSequenceService.NextAsync(branchId, DocumentKinds.X)`: M09, M11, M15 get document numbers here. It changes the row but does not save; save it with the new document. A concurrency error means retry.
+  - `ModuleCatalog` and `ModuleState` (UI): a new optional module gets a key `module.xxx` and its menu item gets `Feature: "module.xxx"` in `NavMenu.razor`.
+  - `OnboardingTick`: ticks an automatic onboarding step from inside a handler. The steps `business-info` and `branch` are automatic.
+- **Assumptions to confirm against the SRS:** service charge is a percent of the items total and is not taxed; tax is on the items total and only taxes marked "Add to every new bill" are used (`TaxRate.AppliesTo` is stored but first used in M06); a fixed tax is a flat amount per bill; rounding is last; module defaults per business type are in `ModuleCatalog`.
+- **Audit:** `business.profile.updated`, `branch.created/updated`, `tax.*`, `billing.settings.updated`, `payment_method.*`, `receipt_template.*`, `number_sequences.updated`, `modules.updated` and `template.applied` (the last two keep the old values).
+
+## 13. Where we are
+
+Modules M00 to M05 are written. The owner builds in Visual Studio and sends build errors; fix them in small steps. Unit tests are not written yet (by the owner's choice, for now).
+
+- **M04 Licensing:** the license-key feature is complete (confirmed by the owner).
+- **M05 Business Settings:** all seven requirements (FR-M05-01 to FR-M05-07) are written and the patches were applied by the owner. The Modules screen was seen running. The other manual checks in `docs/M05-Business-Settings.md` are still to be confirmed by the owner.
+- **Word documents are older than the code:** `FRS.docx` and `Module_Status.docx` (v1.0) still show M04 and M05 as not done. This file is the newer truth until they are rebuilt.
+- **Next module: M06 Menu Management** (FR-M06-01 and onward; done when a 60-item sample menu is created and searchable and an item turned off disappears at the POS), then M07 Tables and M08 Customers to finish Sprint S3. For M06 also read the SRS (business rules), the Database Schema (menu tables) and the UI/UX Specification (menu screens).

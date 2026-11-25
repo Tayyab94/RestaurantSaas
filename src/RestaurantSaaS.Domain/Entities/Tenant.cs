@@ -80,6 +80,38 @@ public sealed class Tenant : BaseEntity
         Name = name.Trim();
     }
 
+    /// <summary>Business profile edited by the Owner (M05). The code, status and deployment mode never change here.</summary>
+    public void UpdateProfile(
+        string name,
+        string ownerName,
+        string? email,
+        string? phone,
+        BusinessType businessType,
+        string timeZone,
+        string defaultLanguage)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(ownerName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(timeZone);
+        ArgumentException.ThrowIfNullOrWhiteSpace(defaultLanguage);
+
+        Name = name.Trim();
+        OwnerName = ownerName.Trim();
+        Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim().ToLowerInvariant();
+        Phone = string.IsNullOrWhiteSpace(phone) ? null : phone.Trim();
+        BusinessType = businessType;
+        TimeZone = timeZone.Trim();
+        DefaultLanguage = defaultLanguage.Trim().ToLowerInvariant();
+    }
+
+    public void SetBusinessType(BusinessType businessType) => BusinessType = businessType;
+
+    public void SetCurrency(string currencyCode)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(currencyCode);
+        CurrencyCode = currencyCode.Trim().ToUpperInvariant();
+    }
+
 
     /// <summary>A paid license or subscription was activated: the business leaves the trial.</summary>
     public void Activate()
